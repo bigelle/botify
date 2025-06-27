@@ -9,14 +9,14 @@ import (
 )
 
 type BotEngine interface {
-	GetUpdates(chan<- Context) error
+	GetUpdates(chan<- Update) error
 }
 
 type LongPollingEngine struct {
 	// TODO: getUpdates params
 }
 
-func (e *LongPollingEngine) GetUpdates(chCtx chan<- Context) error {
+func (e *LongPollingEngine) GetUpdates(chCtx chan<- Update) error {
 	// TODO:
 	return nil
 }
@@ -25,7 +25,7 @@ type WebhookEngine struct {
 	// TODO: setWebhook params
 }
 
-func (e *WebhookEngine) ProgressUpdate(chCtx chan<- Context) error {
+func (e *WebhookEngine) ProgressUpdate(chCtx chan<- Update) error {
 	// TODO
 	return nil
 }
@@ -116,7 +116,7 @@ type Bot struct {
 	workerPool    int
 
 	// runtime
-	chCtx      chan Context
+	chUpdate      chan Update
 	isOnline   bool
 	hasWebhook bool
 }
@@ -142,7 +142,7 @@ func (b *Bot) Serve() error {
 		return fmt.Errorf("can't use long polling bot when webhook is set; call for deleteWebhook before using long polling bot")
 	}
 
-	return b.engine.GetUpdates(b.chCtx)
+	return b.engine.GetUpdates(b.chUpdate)
 }
 
 type APIResponse struct {
