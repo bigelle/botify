@@ -1,6 +1,7 @@
 package botify
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -8,14 +9,14 @@ import (
 )
 
 type BotEngine interface {
-	ProgressUpdate(chan<- Context) error
+	GetUpdates(chan<- Context) error
 }
 
 type LongPollingEngine struct {
 	// TODO: getUpdates params
 }
 
-func (e *LongPollingEngine) ProgressUpdate(chCtx chan<- Context) error {
+func (e *LongPollingEngine) GetUpdates(chCtx chan<- Context) error {
 	// TODO:
 	return nil
 }
@@ -29,13 +30,90 @@ func (e *WebhookEngine) ProgressUpdate(chCtx chan<- Context) error {
 	return nil
 }
 
+type RequestSender interface {
+	Send(obj APIMethod) (*APIResponse, error)
+	SendRaw(method string, obj any) (*APIResponse, error)
+}
+
+type DefaultRequestSender struct {
+	Client   *http.Client
+	APIToken string
+	APIHost  string
+	UsePOST  bool
+}
+
+func (s *DefaultRequestSender) Send(obj APIMethod) (apiResp *APIResponse, err error) {
+	var req *http.Request
+	var resp *http.Response
+
+	m := "GET"
+	if s.UsePOST {
+		m = "POST"
+	}
+
+	reqURL := fmt.Sprintf("%sbot%s/%s", s.APIHost, s.APIToken, obj.Method())
+
+	req, err = http.NewRequest(m, reqURL, obj.Payload())
+	if err != nil {
+		return nil, fmt.Errorf("creating request: %w", err)
+	}
+
+	resp, err = s.Client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("sending request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if err = json.NewDecoder(resp.Body).Decode(&apiResp); err != nil {
+		return nil, fmt.Errorf("reading API response: %w", err)
+	}
+
+	return apiResp, nil
+}
+
+func (s *DefaultRequestSender) SendRaw(method string, obj any) (apiResp *APIResponse, err error) {
+	var req *http.Request
+	var resp *http.Response
+	payload := &bytes.Buffer{}
+
+	if obj != nil {
+		if err = json.NewEncoder(payload).Encode(obj); err != nil {
+			return nil, fmt.Errorf("encoding request payload: %w", err)
+		}
+	}
+
+	m := "GET"
+	if s.UsePOST {
+		m = "POST"
+	}
+
+	reqURL := fmt.Sprintf("%sbot%s/%s", s.APIHost, s.APIToken, method)
+
+	req, err = http.NewRequest(m, reqURL, payload)
+	if err != nil {
+		return nil, fmt.Errorf("creating request: %w", err)
+	}
+
+	resp, err = s.Client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("sending request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if err = json.NewDecoder(resp.Body).Decode(&apiResp); err != nil {
+		return nil, fmt.Errorf("reading API response: %w", err)
+	}
+
+	return apiResp, nil
+}
+
 type Bot struct {
 	// configurable
-	token      string
-	handlers   map[UpdateType]HandlerFunc
-	engine     BotEngine
-	bufSize    int
-	workerPool int
+	handlers      map[UpdateType][]HandlerFunc
+	engine        BotEngine
+	requestSender RequestSender
+	bufSize       int
+	workerPool    int
 
 	// runtime
 	chCtx      chan Context
@@ -46,49 +124,25 @@ type Bot struct {
 func NewBot(token string, engine BotEngine) *Bot {
 	// NOTE: should i return err? what causes it?
 	return &Bot{
-		token:      token,
-		handlers:   make(map[UpdateType]HandlerFunc), // FIXME: use a map full of default empty handlers
-		engine:     engine,
-		bufSize:    0,
-		workerPool: runtime.NumCPU(),
+		handlers:      make(map[UpdateType][]HandlerFunc), // FIXME: use a map full of default empty handlers
+		engine:        engine,
+		requestSender: &DefaultRequestSender{APIToken: token},
+		bufSize:       0,
+		workerPool:    runtime.NumCPU(),
 	}
 }
 
-func (b *Bot) Serve() error {
-	wh, err := b.getWebhookInfo()
-	if err != nil {
-		return fmt.Errorf("requesting info about webhook: %w", err)
-	}
-	if wh.URL != "" {
-		b.hasWebhook = true
-	}
+func (b *Bot) Handle(t UpdateType, handler ...HandlerFunc) {
+	b.handlers[t] = append(b.handlers[t], handler...)
+}
 
+func (b *Bot) Serve() error {
 	_, ok := b.engine.(*LongPollingEngine)
 	if ok && b.hasWebhook {
 		return fmt.Errorf("can't use long polling bot when webhook is set; call for deleteWebhook before using long polling bot")
 	}
 
-	return b.engine.ProgressUpdate(b.chCtx)
-}
-
-func (b *Bot) getWebhookInfo() (WebhookInfo, error) {
-	reqURL := fmt.Sprintf("https://api.telegram.org/bot%s/getWebhookInfo", b.token)
-	resp, err := http.Get(reqURL)
-	if err != nil {
-		return WebhookInfo{}, fmt.Errorf("requesting for webhook info: %w", err)
-	}
-	defer resp.Body.Close()
-
-	var response APIResponse
-	if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
-		return WebhookInfo{}, fmt.Errorf("reading API response: %w", err)
-	}
-
-	if !response.Ok {
-		return WebhookInfo{}, fmt.Errorf("error from API: %s", response.Description)
-	}
-
-	return response.Result.(WebhookInfo), nil
+	return b.engine.GetUpdates(b.chCtx)
 }
 
 type APIResponse struct {
