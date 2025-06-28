@@ -29,7 +29,7 @@ const (
 	UpdateTypeRemovedChatBoost
 )
 
-type HandlerFunc func(ctx Context) error
+type HandlerFunc func(ctx Context)
 
 type Context struct {
 	bot *Bot
@@ -39,11 +39,11 @@ type Context struct {
 }
 
 func (c *Context) SendRequest(obj APIMethod) (*APIResponse, error) {
-	return c.bot.requestSender.Send(obj)
+	return c.bot.engine.Send(obj)
 }
 
 func (c *Context) SendRequestRaw(method string, obj any) (*APIResponse, error) {
-	return c.bot.requestSender.SendRaw(method, obj)
+	return c.bot.engine.SendRaw(method, obj)
 }
 
 // Use it to make sure that you're working with the expected Update type
