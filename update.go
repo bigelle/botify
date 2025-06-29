@@ -38,12 +38,12 @@ type Context struct {
 	updObj  UpdateObject
 }
 
-func (c *Context) SendRequest(obj APIMethod) (*APIResponse, error) {
-	return c.bot.engine.Send(obj)
+func (c *Context) Send(obj APIMethod) (*APIResponse, error) {
+	return c.bot.sender.Send(obj)
 }
 
-func (c *Context) SendRequestRaw(method string, obj any) (*APIResponse, error) {
-	return c.bot.engine.SendRaw(method, obj)
+func (c *Context) SendRaw(method string, obj any) (*APIResponse, error) {
+	return c.bot.sender.SendRaw(method, obj)
 }
 
 // Use it to make sure that you're working with the expected Update type

@@ -9,11 +9,6 @@ import (
 	"runtime"
 )
 
-type BotEngine interface {
-	UpdateSupplier
-	RequestSender
-}
-
 type UpdateSupplier interface {
 	GetUpdates(context.Context, chan<- Update) error
 }
@@ -23,13 +18,13 @@ type RequestSender interface {
 	SendRaw(method string, obj any) (*APIResponse, error)
 }
 
-type LongPollingEngine struct {
+type LongPollingSupplier struct {
 	Sender RequestSender
 
 	PollingParams GetUpdates
 }
 
-func (e *LongPollingEngine) GetUpdates(ctx context.Context, chUpdate chan<- Update) error {
+func (e *LongPollingSupplier) GetUpdates(ctx context.Context, chUpdate chan<- Update) error {
 	for {
 		select {
 		case <-ctx.Done():
@@ -56,11 +51,11 @@ func (e *LongPollingEngine) GetUpdates(ctx context.Context, chUpdate chan<- Upda
 	}
 }
 
-func (e *LongPollingEngine) Send(obj APIMethod) (*APIResponse, error) {
+func (e *LongPollingSupplier) Send(obj APIMethod) (*APIResponse, error) {
 	return e.Sender.Send(obj)
 }
 
-func (e *LongPollingEngine) SendRaw(method string, obj any) (*APIResponse, error) {
+func (e *LongPollingSupplier) SendRaw(method string, obj any) (*APIResponse, error) {
 	return e.Sender.SendRaw(method, obj)
 }
 
@@ -154,7 +149,8 @@ func (s *DefaultRequestSender) SendRaw(method string, obj any) (apiResp *APIResp
 type Bot struct {
 	// configurable
 	handlers   map[UpdateType][]HandlerFunc
-	engine     BotEngine
+	sender     RequestSender
+	supplier   UpdateSupplier
 	bufSize    int
 	workerPool int
 
@@ -192,6 +188,27 @@ func (b *Bot) Handle(t UpdateType, handler ...HandlerFunc) {
 	b.handlers[t] = append(b.handlers[t], handler...)
 }
 
+func (b *Bot) RequestSender() RequestSender {
+	return b.sender
+}
+
+func (b *Bot) WithRequestSender(sender RequestSender) {
+	b.sender = sender
+	lps, ok := b.supplier.(*LongPollingSupplier)
+	if ok {
+		lps.Sender = sender
+		b.supplier = lps
+	}
+}
+
+func (b *Bot) UpdateSupplier() UpdateSupplier {
+	return b.supplier
+}
+
+func (b *Bot) WithUpdateSupplier(supp UpdateSupplier) {
+	b.supplier = supp
+}
+
 func (b *Bot) Serve() error {
 	ctx, cancel := context.WithCancel(context.Background())
 	b.ctx = ctx
@@ -200,45 +217,32 @@ func (b *Bot) Serve() error {
 	b.chUpdate = make(chan Update, b.bufSize)
 
 	go b.work()
-	return b.engine.GetUpdates(b.ctx, b.chUpdate)
+	return b.supplier.GetUpdates(b.ctx, b.chUpdate)
 }
 
-type LongPollingBuilder struct {
-	token  string
-	engine LongPollingEngine
-}
-
-func NewLongPollingBuilder(token string) *LongPollingBuilder {
-	return &LongPollingBuilder{
-		token: token,
-		engine: LongPollingEngine{
-			Sender: &DefaultRequestSender{
-				Client:   http.DefaultClient,
-				APIToken: token,
-				APIHost:  "https://api.telegram.org/",
-			},
-			PollingParams: struct {
-				Offset         int       "json:\"offset\""
-				Limit          int       "json:\"limit\""
-				Timeout        int       "json:\"timeout\""
-				AllowedUpdates *[]string "json:\"allowed_updates\""
-			}{
-				Offset:         0,
-				Limit:          100,
-				Timeout:        30,
+func DefaultLongPollingBot(token string) *Bot {
+	sender := DefaultRequestSender {
+		Client: http.DefaultClient,
+		APIToken: token,
+		APIHost: "https://api.telegram.org/",
+		UsePOST: false,
+	}
+	bot := Bot {
+		handlers: make(map[UpdateType][]HandlerFunc),
+		sender: &sender,
+		supplier: &LongPollingSupplier{
+			Sender: &sender,
+			PollingParams: GetUpdates{
+				Offset: 0,
+				Timeout: 30,
+				Limit: 100,
 				AllowedUpdates: &[]string{},
 			},
 		},
-	}
-}
-
-func (b *LongPollingBuilder) Build() *Bot {
-	return &Bot{
-		handlers:   make(map[UpdateType][]HandlerFunc),
-		engine:     &b.engine,
-		bufSize:    0,
+		bufSize: 0,
 		workerPool: runtime.NumCPU(),
 	}
+	return &bot
 }
 
 type APIResponse struct {
@@ -253,13 +257,13 @@ func (r *APIResponse) Bind(dest any) error {
 }
 
 type WebhookInfo struct {
-	URL                          string
-	HasCustomCertificate         bool
-	PendingUpdateCount           int
-	IPAddress                    string
-	LastErrorDate                int
-	LastErrorMessage             string
-	LastSynchronizationErrorDate int
-	MaxConnections               int
-	AllowedUpdates               []string
+	URL                          string   `json:"url"`
+	HasCustomCertificate         *bool     `json:"has_custom_certificate"`
+	PendingUpdateCount           *int      `json:"pending_update_count"`
+	IPAddress                    *string   `json:"ip_address"`
+	LastErrorDate                *int      `json:"last_error_date"`
+	LastErrorMessage             *string   `json:"last_error_message"`
+	LastSynchronizationErrorDate *int      `json:"last_synchronization_error_date"`
+	MaxConnections               *int      `json:"max_connections"`
+	AllowedUpdates               *[]string `json:"allowed_updates"`
 }
