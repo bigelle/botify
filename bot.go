@@ -148,7 +148,7 @@ func (s *DefaultRequestSender) SendRaw(method string, obj any) (apiResp *APIResp
 
 type Bot struct {
 	// configurable
-	handlers   map[UpdateType][]HandlerFunc
+	handlers   map[UpdateType]HandlerFunc
 	sender     RequestSender
 	supplier   UpdateSupplier
 	bufSize    int
@@ -169,23 +169,27 @@ func (b *Bot) work() {
 			return
 
 		case upd := <-b.chUpdate:
-			ctx := Context{bot: b}
-			if upd.Message != nil {
-				ctx.updType = UpdateTypeMessage
-				ctx.updObj = upd.Message
-
-				handlers := b.handlers[ctx.updType]
-				for _, h := range handlers {
-					h(ctx)
-				}
+			ctx := Context{
+				bot: b,
+				updType: upd.UpdateType(),
+				upd: &upd,
 			}
 
+			all, ok := b.handlers[UpdateTypeAll]
+			if ok {
+				all(ctx)
+			}
+
+			exact, ok := b.handlers[ctx.updType]
+			if ok {
+				exact(ctx)
+			}
 		}
 	}
 }
 
-func (b *Bot) Handle(t UpdateType, handler ...HandlerFunc) {
-	b.handlers[t] = append(b.handlers[t], handler...)
+func (b *Bot) Handle(t UpdateType, handler HandlerFunc) {
+	b.handlers[t] = handler
 }
 
 func (b *Bot) RequestSender() RequestSender {
@@ -228,7 +232,7 @@ func DefaultLongPollingBot(token string) *Bot {
 		UsePOST: false,
 	}
 	bot := Bot {
-		handlers: make(map[UpdateType][]HandlerFunc),
+		handlers: make(map[UpdateType]HandlerFunc),
 		sender: &sender,
 		supplier: &LongPollingSupplier{
 			Sender: &sender,
