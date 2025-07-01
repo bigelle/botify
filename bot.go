@@ -50,14 +50,14 @@ func (b *Bot) work() {
 				upd:     &upd,
 			}
 
-			all, ok := b.handlers[UpdateTypeAll]
-			if ok {
-				all(ctx)
-			}
-
 			exact, ok := b.handlers[ctx.updType]
 			if ok {
 				exact(ctx)
+			}
+
+			all, ok := b.handlers[UpdateTypeAll]
+			if ok {
+				all(ctx)
 			}
 		}
 	}
@@ -89,6 +89,21 @@ func (b *Bot) WithUpdateSupplier(supp UpdateSupplier) {
 }
 
 func (b *Bot) Serve() error {
+	r, err := b.sender.Send(GetWebhookInfo)
+	if err != nil {
+		return fmt.Errorf("requesting for webhook info: %w", err)
+	}
+
+	var wh WebhookInfo
+	err = r.BindResult(&wh)
+	if err != nil {
+		return err
+	}
+
+	if _, ok := b.supplier.(*LongPollingSupplier); ok && wh.URL != "" {
+		return fmt.Errorf("can't use long polling when webhook is set; call for deleteWebhook before running long polling bot")
+	}
+
 	ctx, cancel := context.WithCancel(context.Background())
 	b.ctx = ctx
 	b.cancel = cancel
@@ -104,7 +119,6 @@ func DefaultLongPollingBot(token string) *Bot {
 		Client:   http.DefaultClient,
 		APIToken: token,
 		APIHost:  "https://api.telegram.org/",
-		UsePOST:  false,
 	}
 	bot := Bot{
 		handlers: make(map[UpdateType]HandlerFunc),
@@ -138,16 +152,16 @@ func (e *LongPollingSupplier) GetUpdates(ctx context.Context, chUpdate chan<- Up
 		default:
 			get := GetUpdates(e.PollingParams)
 
-			resp, err := e.Sender.Send(&get)
+			resp, err := e.Sender.SendWithContext(ctx, &get)
 			if err != nil {
 				return fmt.Errorf("polling for updates: %w", err)
 			}
 			if !resp.Ok {
-				return fmt.Errorf("error from API: %s", resp.Description)
+				return resp.GetError()
 			}
 
 			var upds []Update
-			resp.Bind(&upds)
+			resp.BindResult(&upds)
 
 			for _, upd := range upds {
 				chUpdate <- upd
@@ -186,7 +200,6 @@ type DefaultRequestSender struct {
 	Client   *http.Client
 	APIToken string
 	APIHost  string
-	UsePOST  bool
 }
 
 func (s *DefaultRequestSender) Send(obj APIMethod) (apiResp *APIResponse, err error) {
@@ -208,7 +221,7 @@ func (s *DefaultRequestSender) SendWithContext(ctx context.Context, obj APIMetho
 		return nil, fmt.Errorf("forming request payload: %w", err)
 	}
 
-	return s.send(ctx, obj.Method(), payload)
+	return s.send(ctx, obj.Method(), payload, obj.ContentType())
 }
 
 func (s *DefaultRequestSender) SendRaw(method string, obj any) (apiResp *APIResponse, err error) {
@@ -233,23 +246,22 @@ func (s *DefaultRequestSender) SendRawWithContext(ctx context.Context, method st
 		}
 	}
 
-	return s.send(ctx, method, payload)
+	return s.send(ctx, method, payload, "application/json")
 }
 
-func (s *DefaultRequestSender) send(ctx context.Context, method string, payload io.Reader) (apiResp *APIResponse, err error) {
+func (s *DefaultRequestSender) send(ctx context.Context, method string, payload io.Reader, contentType string) (apiResp *APIResponse, err error) {
 	var req *http.Request
 	var resp *http.Response
 
-	m := "GET"
-	if s.UsePOST {
-		m = "POST"
-	}
-
 	reqURL := fmt.Sprintf("%sbot%s/%s", s.APIHost, s.APIToken, method)
 
-	req, err = http.NewRequestWithContext(ctx, m, reqURL, payload)
+	req, err = http.NewRequestWithContext(ctx, "POST", reqURL, payload)
 	if err != nil {
 		return nil, fmt.Errorf("creating request: %w", err)
+	}
+
+	if contentType != "" {
+		req.Header.Add("Content-Type", contentType)
 	}
 
 	resp, err = s.Client.Do(req)
@@ -290,7 +302,7 @@ type APIResponse struct {
 	Parameters  *ResponseParameters `json:"parameters"`
 }
 
-func (r *APIResponse) Bind(dest any) error {
+func (r *APIResponse) BindResult(dest any) error {
 	return json.NewDecoder(bytes.NewReader(r.Result)).Decode(dest)
 }
 
