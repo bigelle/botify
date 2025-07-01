@@ -1,5 +1,11 @@
 package botify
 
+import (
+	"bytes"
+	"encoding/json"
+	"fmt"
+)
+
 // This object represents a message.
 type Message struct {
 	// Unique message identifier inside this chat.
@@ -17,7 +23,7 @@ type Message struct {
 	// Optional. Sender of the message; may be empty for messages sent to channels.
 	// For backward compatibility, if the message was sent on behalf of a chat,
 	// the field contains a fake sender user in non-channel chats
-	// From *User `json:"from,omitempty"`
+	From *User `json:"from,omitempty"`
 	// Optional. Sender of the message when sent on behalf of a chat.
 	// For example, the supergroup itself for messages sent by its anonymous administrators or
 	// a linked channel for messages automatically forwarded to the channel's discussion group.
@@ -28,7 +34,7 @@ type Message struct {
 	SenderBoostCount *int `json:"sender_boost_count,omitempty"`
 	// Optional. The bot that actually sent the message on behalf of the business account.
 	// Available only for outgoing messages sent on behalf of the connected business account.
-	// SenderBusinessBot *User `json:"sender_business_bot,omitempty"`
+	SenderBusinessBot *User `json:"sender_business_bot,omitempty"`
 	// Optional. Unique identifier of the business connection from which the message was received.
 	// If non-empty, the message belongs to a chat of the corresponding business account that is
 	// independent from any potential bot chat which might share the same identifier.
@@ -49,7 +55,7 @@ type Message struct {
 	// Optional. For replies to a story, the original story
 	// ReplyToStory *Story `json:"reply_to_story,omitempty"`
 	// Optional. Bot through which the message was sent
-	// ViaBot *User `json:"via_bot,omitempty"`
+	ViaBot *User `json:"via_bot,omitempty"`
 	// Optional. Date the message was last edited in Unix time
 	EditDate *int `json:"edit_date,omitempty"`
 	// Optional. True, if the message can't be forwarded
@@ -114,9 +120,9 @@ type Message struct {
 	// Optional. Message is a shared location, information about the location
 	// Location *Location `json:"location,omitempty"`
 	// Optional. New members that were added to the group or supergroup and information about them (the bot itself may be one of these members)
-	// NewChatMembers *[]User `json:"new_chat_members,omitempty"`
+	NewChatMembers *[]User `json:"new_chat_members,omitempty"`
 	// Optional. A member was removed from the group, information about them (this member may be the bot itself)
-	// LeftChatMember *User `json:"left_chat_member,omitempty"`
+	LeftChatMember *User `json:"left_chat_member,omitempty"`
 	// Optional. A chat title was changed to this value
 	NewChatTitle *string `json:"new_chat_title,omitempty"`
 	// Optional. A chat photo was change to this value
@@ -213,6 +219,8 @@ type Message struct {
 	// ReplyMarkup *InlineKeyboardMarkup `json:"reply_markup,omitempty"`
 }
 
+type User struct{}
+
 type Chat struct {
 	ID        int     `json:"id"`
 	Type      string  `json:"type"`
@@ -221,4 +229,75 @@ type Chat struct {
 	FirstName *string `json:"first_name"`
 	LastName  *string `json:"last_name"`
 	IsForum   *bool   `json:"is_forum"`
+}
+
+type ChatBoostSource struct {
+	Source string `json:"source"`
+	raw    json.RawMessage
+}
+
+func (c *ChatBoostSource) UnmarshalJSON(data []byte) error {
+	type Alias ChatBoostSource
+	aux := &struct {
+		*Alias
+	}{
+		Alias: (*Alias)(c),
+	}
+	if err := json.Unmarshal(data, &aux); err != nil {
+		return err
+	}
+	c.raw = data
+	return nil
+}
+
+func (s *ChatBoostSource) AsPremium() (*ChatBoostSourcePremium, error) {
+	if s.Source != "premium" {
+		return nil, fmt.Errorf("failed conversion; expected source premium, got %s", s.Source)
+	}
+
+	var result ChatBoostSourcePremium
+	if err := json.NewDecoder(bytes.NewReader(s.raw)).Decode(&result); err != nil {
+		return nil, fmt.Errorf("converting to ChatBoostSourcePremium: %w", err)
+	}
+
+	return &result, nil
+}
+
+func (s *ChatBoostSource) AsGiftCode() (*ChatBoostSourceGiftCode, error) {
+	if s.Source != "gift_code" {
+		return nil, fmt.Errorf("failed conversion; expected source gift_code, got %s", s.Source)
+	}
+
+	var result ChatBoostSourceGiftCode
+	if err := json.NewDecoder(bytes.NewReader(s.raw)).Decode(&result); err != nil {
+		return nil, fmt.Errorf("converting to ChatBoostSourcePremium: %w", err)
+	}
+
+	return &result, nil
+}
+
+func (s *ChatBoostSource) AsGiveaway() (*ChatBoostSourceGiveaway, error) {
+	if s.Source != "giveaway" {
+		return nil, fmt.Errorf("failed conversion; expected source giveaway, got %s", s.Source)	}
+
+	var result ChatBoostSourceGiveaway
+	if err := json.NewDecoder(bytes.NewReader(s.raw)).Decode(&result); err != nil {
+		return nil, fmt.Errorf("converting to ChatBoostSourcePremium: %w", err)	}
+
+	return &result, nil
+}
+
+type ChatBoostSourcePremium struct {
+	User User `json:"user"`
+}
+
+type ChatBoostSourceGiftCode struct {
+	User User `json:"user"`
+}
+
+type ChatBoostSourceGiveaway struct {
+	GiveawayMessageID int   `json:"giveaway_message_id"`
+	User              *User `json:"user"`
+	PrizeStarCount    *int  `json:"prize_star_count"`
+	IsUnclaimed       *bool `json:"is_unclaimed"`
 }
