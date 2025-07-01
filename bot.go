@@ -111,7 +111,9 @@ func (b *Bot) Serve() error {
 
 	b.chUpdate = make(chan Update, b.bufSize)
 
-	go b.work()
+	for range b.workerPool {
+		go b.work()
+	}
 	return b.supplier.GetUpdates(b.ctx, b.chUpdate)
 }
 
