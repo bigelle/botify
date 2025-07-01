@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"net/http"
 	"runtime"
@@ -250,11 +249,29 @@ func (s *DefaultRequestSender) SendRaw(method string, obj any) (apiResp *APIResp
 	return apiResp, nil
 }
 
+type ChatMigratedError int
+
+func (e ChatMigratedError) Error() string {
+	return fmt.Sprintf("the group has been migrated to the supergroup with the identiefier %d", e)
+}
+
+type TooManyRequestsError int
+
+func (e TooManyRequestsError) Error() string {
+	return fmt.Sprintf("too many requests; retry after %d seconds", e)
+}
+
+type BadRequestError string
+
+func (e BadRequestError) Error() string {
+	return string(e)
+}
+
 type APIResponse struct {
-	Ok          bool
-	Description string
-	Result      json.RawMessage
-	// TODO:  response parameters
+	Ok          bool               `json:"ok"`
+	Description string             `json:"description"`
+	Result      json.RawMessage    `json:"result"`
+	Parameters  *ResponseParameters `json:"parameters"`
 }
 
 func (r *APIResponse) Bind(dest any) error {
@@ -266,10 +283,26 @@ func (r *APIResponse) IsSuccessful() bool {
 }
 
 func (r *APIResponse) GetError() error {
-	if r.Ok {
+	if r.IsSuccessful() {
 		return nil
 	}
-	return errors.New(r.Description)
+
+	if r.Parameters != nil {
+		params := r.Parameters
+		if params.MigrateToChatID != nil {
+			return ChatMigratedError(*params.MigrateToChatID)
+		}
+		if params.RetryAfter != nil {
+			return TooManyRequestsError(*params.RetryAfter)
+		}
+	}
+
+	return BadRequestError(r.Description)
+}
+
+type ResponseParameters struct {
+	MigrateToChatID *int `json:"migrate_to_chat_id"`
+	RetryAfter      *int `json:"retry_after"`
 }
 
 type WebhookInfo struct {
