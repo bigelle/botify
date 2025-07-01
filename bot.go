@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"runtime"
+	"time"
 )
 
 type UpdateSupplier interface {
@@ -162,6 +163,12 @@ func (e *LongPollingSupplier) GetUpdates(ctx context.Context, chUpdate chan<- Up
 
 			var upds []Update
 			resp.BindResult(&upds)
+
+			// to avoid any rate limits we are sleeping when there's no activity
+			if len(upds) == 0 {
+				time.Sleep(1 * time.Second)
+				continue
+			}
 
 			for _, upd := range upds {
 				chUpdate <- upd
