@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"runtime"
@@ -16,6 +17,109 @@ type UpdateSupplier interface {
 type RequestSender interface {
 	Send(obj APIMethod) (*APIResponse, error)
 	SendRaw(method string, obj any) (*APIResponse, error)
+}
+
+type Bot struct {
+	// configurable
+	handlers   map[UpdateType]HandlerFunc
+	sender     RequestSender
+	supplier   UpdateSupplier
+	bufSize    int
+	workerPool int
+
+	// runtime
+	chUpdate   chan Update
+	ctx        context.Context
+	cancel     context.CancelFunc
+	isOnline   bool
+	hasWebhook bool
+}
+
+func (b *Bot) work() {
+	for {
+		select {
+		case <-b.ctx.Done():
+			return
+
+		case upd := <-b.chUpdate:
+			ctx := Context{
+				bot:     b,
+				updType: upd.UpdateType(),
+				upd:     &upd,
+			}
+
+			all, ok := b.handlers[UpdateTypeAll]
+			if ok {
+				all(ctx)
+			}
+
+			exact, ok := b.handlers[ctx.updType]
+			if ok {
+				exact(ctx)
+			}
+		}
+	}
+}
+
+func (b *Bot) Handle(t UpdateType, handler HandlerFunc) {
+	b.handlers[t] = handler
+}
+
+func (b *Bot) RequestSender() RequestSender {
+	return b.sender
+}
+
+func (b *Bot) WithRequestSender(sender RequestSender) {
+	b.sender = sender
+	lps, ok := b.supplier.(*LongPollingSupplier)
+	if ok {
+		lps.Sender = sender
+		b.supplier = lps
+	}
+}
+
+func (b *Bot) UpdateSupplier() UpdateSupplier {
+	return b.supplier
+}
+
+func (b *Bot) WithUpdateSupplier(supp UpdateSupplier) {
+	b.supplier = supp
+}
+
+func (b *Bot) Serve() error {
+	ctx, cancel := context.WithCancel(context.Background())
+	b.ctx = ctx
+	b.cancel = cancel
+
+	b.chUpdate = make(chan Update, b.bufSize)
+
+	go b.work()
+	return b.supplier.GetUpdates(b.ctx, b.chUpdate)
+}
+
+func DefaultLongPollingBot(token string) *Bot {
+	sender := DefaultRequestSender{
+		Client:   http.DefaultClient,
+		APIToken: token,
+		APIHost:  "https://api.telegram.org/",
+		UsePOST:  false,
+	}
+	bot := Bot{
+		handlers: make(map[UpdateType]HandlerFunc),
+		sender:   &sender,
+		supplier: &LongPollingSupplier{
+			Sender: &sender,
+			PollingParams: GetUpdates{
+				Offset:         0,
+				Timeout:        30,
+				Limit:          100,
+				AllowedUpdates: &[]string{},
+			},
+		},
+		bufSize:    0,
+		workerPool: runtime.NumCPU(),
+	}
+	return &bot
 }
 
 type LongPollingSupplier struct {
@@ -146,109 +250,6 @@ func (s *DefaultRequestSender) SendRaw(method string, obj any) (apiResp *APIResp
 	return apiResp, nil
 }
 
-type Bot struct {
-	// configurable
-	handlers   map[UpdateType]HandlerFunc
-	sender     RequestSender
-	supplier   UpdateSupplier
-	bufSize    int
-	workerPool int
-
-	// runtime
-	chUpdate   chan Update
-	ctx        context.Context
-	cancel     context.CancelFunc
-	isOnline   bool
-	hasWebhook bool
-}
-
-func (b *Bot) work() {
-	for {
-		select {
-		case <-b.ctx.Done():
-			return
-
-		case upd := <-b.chUpdate:
-			ctx := Context{
-				bot: b,
-				updType: upd.UpdateType(),
-				upd: &upd,
-			}
-
-			all, ok := b.handlers[UpdateTypeAll]
-			if ok {
-				all(ctx)
-			}
-
-			exact, ok := b.handlers[ctx.updType]
-			if ok {
-				exact(ctx)
-			}
-		}
-	}
-}
-
-func (b *Bot) Handle(t UpdateType, handler HandlerFunc) {
-	b.handlers[t] = handler
-}
-
-func (b *Bot) RequestSender() RequestSender {
-	return b.sender
-}
-
-func (b *Bot) WithRequestSender(sender RequestSender) {
-	b.sender = sender
-	lps, ok := b.supplier.(*LongPollingSupplier)
-	if ok {
-		lps.Sender = sender
-		b.supplier = lps
-	}
-}
-
-func (b *Bot) UpdateSupplier() UpdateSupplier {
-	return b.supplier
-}
-
-func (b *Bot) WithUpdateSupplier(supp UpdateSupplier) {
-	b.supplier = supp
-}
-
-func (b *Bot) Serve() error {
-	ctx, cancel := context.WithCancel(context.Background())
-	b.ctx = ctx
-	b.cancel = cancel
-
-	b.chUpdate = make(chan Update, b.bufSize)
-
-	go b.work()
-	return b.supplier.GetUpdates(b.ctx, b.chUpdate)
-}
-
-func DefaultLongPollingBot(token string) *Bot {
-	sender := DefaultRequestSender {
-		Client: http.DefaultClient,
-		APIToken: token,
-		APIHost: "https://api.telegram.org/",
-		UsePOST: false,
-	}
-	bot := Bot {
-		handlers: make(map[UpdateType]HandlerFunc),
-		sender: &sender,
-		supplier: &LongPollingSupplier{
-			Sender: &sender,
-			PollingParams: GetUpdates{
-				Offset: 0,
-				Timeout: 30,
-				Limit: 100,
-				AllowedUpdates: &[]string{},
-			},
-		},
-		bufSize: 0,
-		workerPool: runtime.NumCPU(),
-	}
-	return &bot
-}
-
 type APIResponse struct {
 	Ok          bool
 	Description string
@@ -260,8 +261,19 @@ func (r *APIResponse) Bind(dest any) error {
 	return json.NewDecoder(bytes.NewReader(r.Result)).Decode(dest)
 }
 
+func (r *APIResponse) IsSuccessful() bool {
+	return r.Ok
+}
+
+func (r *APIResponse) GetError() error {
+	if r.Ok {
+		return nil
+	}
+	return errors.New(r.Description)
+}
+
 type WebhookInfo struct {
-	URL                          string   `json:"url"`
+	URL                          string    `json:"url"`
 	HasCustomCertificate         *bool     `json:"has_custom_certificate"`
 	PendingUpdateCount           *int      `json:"pending_update_count"`
 	IPAddress                    *string   `json:"ip_address"`
