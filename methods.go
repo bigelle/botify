@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"mime/multipart"
 
 	"github.com/bigelle/botify/internal/reused"
 )
@@ -146,6 +147,42 @@ func (m *SendPhoto) Method() string {
 }
 
 func (m *SendPhoto) Payload() (io.Reader, error) {
-	// TODO:
-	return nil, nil
+	buf := &bytes.Buffer{}
+
+	if local, ok := m.Photo.(InputFileLocal); ok {
+		mw := multipart.NewWriter(buf)
+		defer mw.Close()
+
+		m.ct = mw.FormDataContentType()
+
+		part, err := mw.CreateFormFile("photo", local.Name)
+		if err != nil {
+			return nil, fmt.Errorf("creating form file: %w", err)
+		}
+
+		_, err = io.Copy(part, local.Data)
+		if err != nil {
+			return nil, fmt.Errorf("writing form file: %w", err)
+		}
+
+		err = mw.WriteField("chat_id", m.ChatID)
+		if err != nil {
+			return nil, fmt.Errorf("writing form field: %w", err)
+		}
+
+		return buf, nil
+	}
+
+	m.ct = "application/json"
+
+	enc := json.NewEncoder(buf)
+	enc.SetIndent("", "  ")
+	enc.SetEscapeHTML(false)
+
+	err := enc.Encode(m)
+	if err != nil {
+		return nil, fmt.Errorf("encoding request payload: %w", err)
+	}
+
+	return buf, nil
 }

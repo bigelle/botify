@@ -311,11 +311,11 @@ type InputFile interface {
 
 type InputFileRemote string
 
-func (i InputFileRemote) iAmAnInputFile()
+func (i InputFileRemote) iAmAnInputFile() {}
 
 type InputFileLocal struct {
 	Data io.Reader
 	Name string
 }
 
-func (i InputFileLocal) iAmAnInputFile()
+func (i InputFileLocal) iAmAnInputFile() {}
