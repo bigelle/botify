@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+
+	"github.com/bigelle/botify/internal/reused"
 )
 
 type APIMethod interface {
@@ -17,7 +19,7 @@ type APIMethod interface {
 // meaning there is no request body and it does not require Content-Type header.
 type MethodWithNoParams string
 
-func(m MethodWithNoParams) ContentType() string {
+func (m MethodWithNoParams) ContentType() string {
 	return ""
 }
 
@@ -49,7 +51,10 @@ func (m *GetUpdates) Method() string {
 }
 
 func (m *GetUpdates) Payload() (io.Reader, error) {
-	buf := &bytes.Buffer{}
+	b := reused.Buf()
+	defer reused.PutBuf(b)
+
+	buf := bytes.NewBuffer(*b)
 
 	err := json.NewEncoder(buf).Encode(m)
 	if err != nil {
@@ -107,7 +112,10 @@ func (m *SendMessage) Method() string {
 }
 
 func (m *SendMessage) Payload() (io.Reader, error) {
-	buf := &bytes.Buffer{}
+	b := reused.Buf()
+	defer reused.PutBuf(b)
+
+	buf := bytes.NewBuffer(*b)
 
 	enc := json.NewEncoder(buf)
 	enc.SetEscapeHTML(false)
@@ -120,26 +128,24 @@ func (m *SendMessage) Payload() (io.Reader, error) {
 	return buf, nil
 }
 
-type SendMessageBuilder struct {
-	sm SendMessage
+type SendPhoto struct {
+	ChatID string    `json:"chat_id"`
+	Photo  InputFile `json:"photo"`
+	// TODO: other fields
+
+	ct string
 }
 
-func NewSendMessageBuilder(chatID, text string) *SendMessageBuilder {
-	return &SendMessageBuilder{
-		sm: SendMessage{
-			ChatId: chatID,
-			Text:   text,
-		},
-	}
+func (m *SendPhoto) ContentType() string {
+	// if it returned an empty string, it means something went wrong in Payload() method
+	return m.ct
 }
 
-func (b *SendMessageBuilder) BusinessConnectionID(id string) *SendMessageBuilder {
-	b.sm.BusinessConnectionId = &id
-	return b
+func (m *SendPhoto) Method() string {
+	return "sendPhoto"
 }
 
-// TODO: other fields. do it only after fixing commented fields
-
-func (b *SendMessageBuilder) Build() *SendMessage {
-	return &b.sm
+func (m *SendPhoto) Payload() (io.Reader, error) {
+	// TODO:
+	return nil, nil
 }

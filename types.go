@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 )
 
 // This object represents a message.
@@ -278,11 +279,13 @@ func (s *ChatBoostSource) AsGiftCode() (*ChatBoostSourceGiftCode, error) {
 
 func (s *ChatBoostSource) AsGiveaway() (*ChatBoostSourceGiveaway, error) {
 	if s.Source != "giveaway" {
-		return nil, fmt.Errorf("failed conversion; expected source giveaway, got %s", s.Source)	}
+		return nil, fmt.Errorf("failed conversion; expected source giveaway, got %s", s.Source)
+	}
 
 	var result ChatBoostSourceGiveaway
 	if err := json.NewDecoder(bytes.NewReader(s.raw)).Decode(&result); err != nil {
-		return nil, fmt.Errorf("converting to ChatBoostSourcePremium: %w", err)	}
+		return nil, fmt.Errorf("converting to ChatBoostSourcePremium: %w", err)
+	}
 
 	return &result, nil
 }
@@ -301,3 +304,18 @@ type ChatBoostSourceGiveaway struct {
 	PrizeStarCount    *int  `json:"prize_star_count"`
 	IsUnclaimed       *bool `json:"is_unclaimed"`
 }
+
+type InputFile interface {
+	iAmAnInputFile() // not sure about this one
+}
+
+type InputFileRemote string
+
+func (i InputFileRemote) iAmAnInputFile()
+
+type InputFileLocal struct {
+	Data io.Reader
+	Name string
+}
+
+func (i InputFileLocal) iAmAnInputFile()
