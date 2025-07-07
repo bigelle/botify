@@ -104,7 +104,7 @@ func (b *Bot) Serve() error {
 	}
 
 	if _, ok := b.supplier.(*LongPollingSupplier); ok && wh.URL != "" {
-		return fmt.Errorf("can't use long polling when webhook is set; call for deleteWebhook before running long polling bot")
+		return fmt.Errorf("can't use long polling when webhook is set; use deleteWebhook before running long polling bot")
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -129,13 +129,11 @@ func DefaultLongPollingBot(token string) *Bot {
 		handlers: make(map[UpdateType]HandlerFunc),
 		sender:   &sender,
 		supplier: &LongPollingSupplier{
-			Sender: &sender,
-			PollingParams: GetUpdates{
-				Offset:         0,
-				Timeout:        30,
-				Limit:          100,
-				AllowedUpdates: &[]string{},
-			},
+			Sender:         &sender,
+			Offset:         0,
+			Timeout:        30,
+			Limit:          100,
+			AllowedUpdates: &[]string{},
 		},
 		bufSize:    0,
 		workerPool: runtime.NumCPU(),
@@ -146,7 +144,10 @@ func DefaultLongPollingBot(token string) *Bot {
 type LongPollingSupplier struct {
 	Sender RequestSender
 
-	PollingParams GetUpdates
+	Offset         int
+	Limit          int
+	Timeout        int
+	AllowedUpdates *[]string
 }
 
 func (e *LongPollingSupplier) GetUpdates(ctx context.Context, chUpdate chan<- Update) error {
@@ -155,7 +156,12 @@ func (e *LongPollingSupplier) GetUpdates(ctx context.Context, chUpdate chan<- Up
 		case <-ctx.Done():
 			return nil
 		default:
-			get := GetUpdates(e.PollingParams)
+			get := GetUpdates{
+				Offset:         e.Offset,
+				Limit:          e.Limit,
+				Timeout:        e.Timeout,
+				AllowedUpdates: e.AllowedUpdates,
+			}
 
 			resp, err := e.Sender.SendWithContext(ctx, &get)
 			if err != nil {
@@ -176,25 +182,37 @@ func (e *LongPollingSupplier) GetUpdates(ctx context.Context, chUpdate chan<- Up
 
 			for _, upd := range upds {
 				chUpdate <- upd
-				e.PollingParams.Offset = upd.UpdateID + 1
+				e.Offset = upd.UpdateID + 1
 			}
 		}
 	}
 }
 
 func (e *LongPollingSupplier) Send(obj APIMethod) (*APIResponse, error) {
+	if e.Sender == nil {
+		return nil, fmt.Errorf("request sender is empty")
+	}
 	return e.Sender.Send(obj)
 }
 
 func (e *LongPollingSupplier) SendWithContext(ctx context.Context, obj APIMethod) (*APIResponse, error) {
+	if e.Sender == nil {
+		return nil, fmt.Errorf("request sender is empty")
+	}
 	return e.Sender.SendWithContext(ctx, obj)
 }
 
 func (e *LongPollingSupplier) SendRaw(method string, obj any) (*APIResponse, error) {
+	if e.Sender == nil {
+		return nil, fmt.Errorf("request sender is empty")
+	}
 	return e.Sender.SendRaw(method, obj)
 }
 
 func (e *LongPollingSupplier) SendRawWithContext(ctx context.Context, method string, obj any) (*APIResponse, error) {
+	if e.Sender == nil {
+		return nil, fmt.Errorf("request sender is empty")
+	}
 	return e.Sender.SendRawWithContext(ctx, method, obj)
 }
 
@@ -262,14 +280,19 @@ func (s *DefaultRequestSender) SendRawWithContext(ctx context.Context, method st
 }
 
 func (s *DefaultRequestSender) send(ctx context.Context, method string, payload io.Reader, contentType string) (apiResp *APIResponse, err error) {
+	if s.Client == nil {
+		s.Client = http.DefaultClient
+	}
+
 	var req *http.Request
 	var resp *http.Response
 
 	reqURL := fmt.Sprintf("%sbot%s/%s", s.APIHost, s.APIToken, method)
+	forDebugURL := fmt.Sprintf("%sbot<API token with length = %d>/%s", s.APIHost, len(s.APIToken), method)
 
 	req, err = http.NewRequestWithContext(ctx, "POST", reqURL, payload)
 	if err != nil {
-		return nil, fmt.Errorf("creating request: %w", err)
+		return nil, fmt.Errorf("creating request with URL %s: %w", forDebugURL, err)
 	}
 
 	if contentType != "" {
@@ -278,7 +301,7 @@ func (s *DefaultRequestSender) send(ctx context.Context, method string, payload 
 
 	resp, err = s.Client.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("sending request: %w", err)
+		return nil, fmt.Errorf("sending request with URL %s: %w", forDebugURL, err)
 	}
 	defer resp.Body.Close()
 
