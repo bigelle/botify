@@ -52,10 +52,8 @@ func (m *GetUpdates) Method() string {
 }
 
 func (m *GetUpdates) Payload() (io.Reader, error) {
-	b := reused.Buf()
-	defer reused.PutBuf(b)
-
-	buf := bytes.NewBuffer(*b)
+	buf := reused.Buf()
+	defer reused.PutBuf(buf)
 
 	err := json.NewEncoder(buf).Encode(m)
 	if err != nil {
@@ -113,10 +111,7 @@ func (m *SendMessage) Method() string {
 }
 
 func (m *SendMessage) Payload() (io.Reader, error) {
-	b := reused.Buf()
-	defer reused.PutBuf(b)
-
-	buf := bytes.NewBuffer(*b)
+	buf := bytes.NewBuffer(make([]byte, 4*1024))
 
 	enc := json.NewEncoder(buf)
 	enc.SetEscapeHTML(false)
@@ -147,7 +142,7 @@ func (m *SendPhoto) Method() string {
 }
 
 func (m *SendPhoto) Payload() (io.Reader, error) {
-	buf := &bytes.Buffer{}
+	buf := bytes.NewBuffer(make([]byte, 4*1024))
 
 	if local, ok := m.Photo.(InputFileLocal); ok {
 		mw := multipart.NewWriter(buf)

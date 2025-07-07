@@ -1,28 +1,27 @@
 package reused
 
 import (
+	"bytes"
 	"sync"
 )
 
-// or should it be bigger? idk
-var bufMaxCap = 16 * 1024
+var maxBufCap = 8 * 1024
 
 var bufPool = sync.Pool{
 	New: func() any {
-		b := make([]byte, 0, 4*1024)
-		return &b
+		return bytes.NewBuffer(make([]byte, 4*1024))
 	},
 }
 
-func Buf() *[]byte {
-	return bufPool.Get().(*[]byte)
+func Buf() *bytes.Buffer {
+	return  bufPool.Get().(*bytes.Buffer)
 }
 
-func PutBuf(b *[]byte) {
-	if cap(*b) > bufMaxCap {
+func PutBuf(b *bytes.Buffer) {
+	if b.Cap() > maxBufCap {
 		return
 	}
 
-	*b = (*b)[:0]
+	b.Reset()
 	bufPool.Put(b)
 }

@@ -9,6 +9,8 @@ import (
 	"net/http"
 	"runtime"
 	"time"
+
+	"github.com/bigelle/botify/internal/reused"
 )
 
 type UpdateSupplier interface {
@@ -246,9 +248,10 @@ func (s *DefaultRequestSender) SendRawWithContext(ctx context.Context, method st
 		ctx = context.Background()
 	}
 
-	var payload io.ReadWriter
+	var payload *bytes.Buffer
 	if obj != nil {
-		payload = &bytes.Buffer{}
+		payload = reused.Buf()
+		defer reused.PutBuf(payload)
 
 		if err = json.NewEncoder(payload).Encode(obj); err != nil {
 			return nil, fmt.Errorf("encoding request payload: %w", err)
