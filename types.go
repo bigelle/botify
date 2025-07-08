@@ -7,6 +7,18 @@ import (
 	"io"
 )
 
+type WebhookInfo struct {
+	URL                          string    `json:"url"`
+	HasCustomCertificate         *bool     `json:"has_custom_certificate"`
+	PendingUpdateCount           *int      `json:"pending_update_count"`
+	IPAddress                    *string   `json:"ip_address"`
+	LastErrorDate                *int      `json:"last_error_date"`
+	LastErrorMessage             *string   `json:"last_error_message"`
+	LastSynchronizationErrorDate *int      `json:"last_synchronization_error_date"`
+	MaxConnections               *int      `json:"max_connections"`
+	AllowedUpdates               *[]string `json:"allowed_updates"`
+}
+
 // This object represents a message.
 type Message struct {
 	// Unique message identifier inside this chat.
