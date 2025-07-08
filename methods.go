@@ -6,8 +6,6 @@ import (
 	"fmt"
 	"io"
 	"mime/multipart"
-
-	"github.com/bigelle/botify/internal/reused"
 )
 
 type APIMethod interface {
@@ -37,10 +35,10 @@ const (
 )
 
 type GetUpdates struct {
-	Offset         int       `json:"offset"`
-	Limit          int       `json:"limit"`
-	Timeout        int       `json:"timeout"`
-	AllowedUpdates *[]string `json:"allowed_updates"`
+	Offset         int       `json:"offset,omitempty"`
+	Limit          int       `json:"limit,omitempty"`
+	Timeout        int       `json:"timeout,omitempty"`
+	AllowedUpdates *[]string `json:"allowed_updates,omitempty"`
 }
 
 func (m *GetUpdates) ContentType() string {
@@ -52,13 +50,14 @@ func (m *GetUpdates) Method() string {
 }
 
 func (m *GetUpdates) Payload() (io.Reader, error) {
-	buf := reused.Buf()
-	defer reused.PutBuf(buf)
+	buf := bytes.NewBuffer(make([]byte, 0, 512))
 
 	err := json.NewEncoder(buf).Encode(m)
 	if err != nil {
 		return nil, fmt.Errorf("encoding getUpdates payload: %w", err)
 	}
+
+	buf.Truncate(buf.Len())
 
 	return buf, nil
 }
@@ -111,15 +110,14 @@ func (m *SendMessage) Method() string {
 }
 
 func (m *SendMessage) Payload() (io.Reader, error) {
-	buf := bytes.NewBuffer(make([]byte, 4*1024))
+	buf := bytes.NewBuffer(make([]byte, 0, 4 * 1024))
 
-	enc := json.NewEncoder(buf)
-	enc.SetEscapeHTML(false)
-
-	err := enc.Encode(m)
+	err := json.NewEncoder(buf).Encode(m)
 	if err != nil {
-		return nil, fmt.Errorf("encoding getUpdates payload: %w", err)
+		return nil, fmt.Errorf("encoding sendMessage payload: %w", err)
 	}
+
+	buf.Truncate(buf.Len())
 
 	return buf, nil
 }

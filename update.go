@@ -1,33 +1,46 @@
 package botify
 
-type UpdateType int
+import "fmt"
+
+type UpdateType string
 
 const (
-	UpdateTypeAll UpdateType = iota
-	UpdateTypeMessage
-	UpdateTypeEditedMessage
-	UpdateTypeChannelPost
-	UpdateTypeEditedChannelPost
-	UpdateTypeBusinessConnection
-	UpdateTypeBusinessMessage
-	UpdateTypeEditedBusinessMessage
-	UpdateTypeDeletedBusinessMessages
-	UpdateTypeMessageReaction
-	UpdateTypeMessageReactionCount
-	UpdateTypeInlineQuery
-	UpdateTypeChosenInlineResult
-	UpdateTypeCallbackQuery
-	UpdateTypeShippingQuery
-	UpdateTypePreCheckoutQuery
-	UpdateTypePurchasedPaidMedia
-	UpdateTypePoll
-	UpdateTypePollAnswer
-	UpdateTypeMyChatMember
-	UpdateTypeChatMember
-	UpdateTypeChatJoinRequest
-	UpdateTypeChatBoost
-	UpdateTypeRemovedChatBoost
+	UpdateTypeNone                    UpdateType = "none"
+	UpdateTypeAll                     UpdateType = "all"
+	UpdateTypeMessage                 UpdateType = "message"
+	UpdateTypeEditedMessage           UpdateType = "editedmessage"
+	UpdateTypeChannelPost             UpdateType = "channelpost"
+	UpdateTypeEditedChannelPost       UpdateType = "editedchannelpost"
+	UpdateTypeBusinessConnection      UpdateType = "businessconnection"
+	UpdateTypeBusinessMessage         UpdateType = "businessmessage"
+	UpdateTypeEditedBusinessMessage   UpdateType = "editedbusinessmessage"
+	UpdateTypeDeletedBusinessMessages UpdateType = "deletedbusinessmessages"
+	UpdateTypeMessageReaction         UpdateType = "messagereaction"
+	UpdateTypeMessageReactionCount    UpdateType = "messagereactioncount"
+	UpdateTypeInlineQuery             UpdateType = "inlinequery"
+	UpdateTypeChosenInlineResult      UpdateType = "choseninlineresult"
+	UpdateTypeCallbackQuery           UpdateType = "callbackquery"
+	UpdateTypeShippingQuery           UpdateType = "shippingquery"
+	UpdateTypePreCheckoutQuery        UpdateType = "precheckoutquery"
+	UpdateTypePurchasedPaidMedia      UpdateType = "purchasedpaidmedia"
+	UpdateTypePoll                    UpdateType = "poll"
+	UpdateTypePollAnswer              UpdateType = "pollanswer"
+	UpdateTypeMyChatMember            UpdateType = "mychatmember"
+	UpdateTypeChatMember              UpdateType = "chatmember"
+	UpdateTypeChatJoinRequest         UpdateType = "chatjoinrequest"
+	UpdateTypeChatBoost               UpdateType = "chatboost"
+	UpdateTypeRemovedChatBoost        UpdateType = "removedchatboost"
 )
+
+func (t UpdateType) String() string {
+	return string(t)
+}
+
+type UpdateTypeCommand UpdateType
+
+func (c UpdateTypeCommand) String() string{
+	return  fmt.Sprintf(`command ("%s")`, string(c))
+}
 
 type Update struct {
 	UpdateID          int      `json:"update_id"`
@@ -75,7 +88,7 @@ func (u *Update) UpdateType() UpdateType {
 	if u.EditedBusinessMessage != nil {
 		return UpdateTypeEditedBusinessMessage
 	}
-	return UpdateType(-1)
+	return UpdateTypeNone
 }
 
 type HandlerFunc func(ctx Context)
@@ -100,6 +113,10 @@ func (c *Context) SendRaw(method string, obj any) (*APIResponse, error) {
 // Use it to make sure that you're working with the expected Update type
 func (c *Context) UpdateType() UpdateType {
 	return c.updType
+}
+
+func (c *Context) UpdateID() int {
+	return c.upd.UpdateID
 }
 
 // It is safe to call for Message() if the handler is subscribed to UpdateTypeMessage,
