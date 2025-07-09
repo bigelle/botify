@@ -50,6 +50,9 @@ func (b *Bot) work() {
 }
 
 func (b *Bot) Handle(t UpdateType, handler HandlerFunc) {
+	if b.handlers == nil {
+		b.handlers = make(map[UpdateType]HandlerFunc)
+	}
 	b.handlers[t] = handler
 }
 
@@ -90,24 +93,57 @@ func (b *Bot) Serve() error {
 		return fmt.Errorf("can't use long polling when webhook is set; use deleteWebhook before running long polling bot")
 	}
 
+	if ws, ok := b.supplier.(*WebhookSupplier); ok && wh.URL == "" {
+		swh := SetWebhook{
+			URL:                ws.url,
+			Certificate:        ws.certificate,
+			IPAddress:          ws.ipAddress,
+			MaxConnections:     ws.maxConnections,
+			AllowedUpdates:     ws.allowedUpdates,
+			DropPendingUpdates: ws.dropPendingUpdates,
+			SecretToken:        ws.secretToken,
+		}
+
+		r, err = b.sender.Send(&swh)
+		if err != nil {
+			return fmt.Errorf("setting webhook: %w", err)
+		}
+
+		var whOk bool
+		if err = r.BindResult(&whOk); err != nil {
+			return fmt.Errorf("reading API response: %w", err)
+		}
+
+		if !whOk {
+			err = r.GetError()
+			return fmt.Errorf("failed to set webhook: %w", err)
+		}
+	}
+
 	ctx, cancel := context.WithCancel(context.Background())
 	b.ctx = ctx
 	b.cancel = cancel
 
 	b.chUpdate = make(chan Update, b.bufSize)
 
+	if b.workerPool == 0 {
+		b.workerPool = runtime.NumCPU()
+	}
+
 	for range b.workerPool {
 		go b.work()
 	}
+
 	return b.supplier.GetUpdates(b.ctx, b.chUpdate)
 }
 
 func DefaultLongPollingBot(token string) *Bot {
-	sender := DefaultRequestSender{
+	sender := TGBotAPIRequestSender{
 		Client:   http.DefaultClient,
 		APIToken: token,
 		APIHost:  "https://api.telegram.org/",
 	}
+
 	bot := Bot{
 		handlers: make(map[UpdateType]HandlerFunc),
 		sender:   &sender,
@@ -121,5 +157,6 @@ func DefaultLongPollingBot(token string) *Bot {
 		bufSize:    0,
 		workerPool: runtime.NumCPU(),
 	}
+
 	return &bot
 }

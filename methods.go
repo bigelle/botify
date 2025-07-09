@@ -62,6 +62,125 @@ func (m *GetUpdates) Payload() (io.Reader, error) {
 	return buf, nil
 }
 
+type SetWebhook struct {
+	URL                string    `json:"url"`
+	Certificate        InputFile `json:"certificate,omitempty"`
+	IPAddress          string    `json:"ip_address,omitempty"`
+	MaxConnections     int       `json:"max_connections,omitempty"`
+	AllowedUpdates     *[]string `json:"allowed_updates,omitempty"`
+	DropPendingUpdates bool      `json:"drop_pending_updates,omitempty"`
+	SecretToken        string    `json:"secret_token,omitempty"`
+
+	ct string
+}
+
+func (m *SetWebhook) ContentType() string {
+	// it's always multipart so if ct is empty we fallback
+	if m.ct == "" && m.Certificate != nil {
+		return "multipart/form-data"
+	}
+	// it means there's no Certificate so it is safe to send a JSON
+	if m.ct == "" {
+		return "application/json"
+	}
+	return m.ct
+}
+
+func (m *SetWebhook) Method() string {
+	return "setWebhook"
+}
+
+func (m *SetWebhook) Payload() (io.Reader, error) {
+	if _, ok := m.Certificate.(InputFileRemote); ok {
+		return nil, fmt.Errorf("can't upload the certificate from a remote source; use a local file")
+	}
+
+	if m.Certificate == nil {
+		// then there's no need to send multipart
+		buf := bytes.NewBuffer(make([]byte, 0, 1024))
+
+		enc := json.NewEncoder(buf)
+		enc.SetEscapeHTML(false)
+		enc.SetIndent("", "  ")
+
+		if err := enc.Encode(m); err != nil {
+			return nil, fmt.Errorf("encoding setWebhook payload as JSON: %w", err)
+		}
+
+		return buf, nil
+	}
+
+	return m.multipart()
+}
+
+func (m *SetWebhook) multipart() (io.Reader, error) {
+	var err error
+
+	buf := bytes.NewBuffer(make([]byte, 0, 4*1024))
+
+	mw := multipart.NewWriter(buf)
+	defer mw.Close()
+
+	m.ct = mw.FormDataContentType()
+
+	if err = mw.WriteField("url", m.URL); err != nil {
+		return nil, fmt.Errorf("writing form field: %w", err)
+	}
+
+	cert := m.Certificate.(InputFileLocal)
+
+	part, err := mw.CreateFormFile("certificate", cert.Name)
+	if err != nil {
+		return nil, fmt.Errorf("creating form file: %w", err)
+	}
+
+	_, err = io.Copy(part, cert.Data)
+	if err != nil {
+		return nil, fmt.Errorf("writing form file: %w", err)
+	}
+
+	if m.IPAddress != "" {
+		err = mw.WriteField("ip_address", m.IPAddress)
+		if err != nil {
+			return nil, fmt.Errorf("writing form field: %w", err)
+		}
+	}
+
+	if m.MaxConnections != 0 {
+		err = mw.WriteField("max_connections", fmt.Sprint(m.MaxConnections))
+		if err != nil {
+			return nil, fmt.Errorf("writing form field: %w", err)
+		}
+	}
+
+	if m.AllowedUpdates != nil {
+		b, err := json.Marshal(m.AllowedUpdates)
+		if err != nil {
+			return nil, fmt.Errorf("encoding allowed updates as JSON: %w", err)
+		}
+		err = mw.WriteField("allowed_updates", string(b))
+		if err != nil {
+			return nil, fmt.Errorf("writing form field: %w", err)
+		}
+	}
+
+	if m.DropPendingUpdates {
+		err = mw.WriteField("drop_pending_updates", fmt.Sprint(m.DropPendingUpdates))
+		if err != nil {
+			return nil, fmt.Errorf("writing form field: %w", err)
+		}
+	}
+	
+	if m.SecretToken != "" {
+		err = mw.WriteField("secret_token", m.SecretToken)
+		if err != nil {
+			return nil, fmt.Errorf("writing form field: %w", err)
+		}
+	}
+
+	return buf, nil
+}
+
 // FIXME: commented fields
 
 // Use this method to send text messages.
@@ -110,7 +229,7 @@ func (m *SendMessage) Method() string {
 }
 
 func (m *SendMessage) Payload() (io.Reader, error) {
-	buf := bytes.NewBuffer(make([]byte, 0, 4 * 1024))
+	buf := bytes.NewBuffer(make([]byte, 0, 4*1024))
 
 	err := json.NewEncoder(buf).Encode(m)
 	if err != nil {

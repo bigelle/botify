@@ -32,7 +32,7 @@ type Message struct {
 	Chat Chat `json:"chat"`
 
 	// Optional. Unique identifier of a message thread to which the message belongs; for supergroups only
-	// MessageThreadId *int `json:"message_thread_id,omitempty"`
+	MessageThreadId *int `json:"message_thread_id,omitempty"`
 	// Optional. Sender of the message; may be empty for messages sent to channels.
 	// For backward compatibility, if the message was sent on behalf of a chat,
 	// the field contains a fake sender user in non-channel chats

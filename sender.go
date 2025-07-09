@@ -73,17 +73,25 @@ type RequestSender interface {
 	SendRawWithContext(ctx context.Context, method string, obj any) (*APIResponse, error)
 }
 
-type DefaultRequestSender struct {
+func DefaultRequestSender(token string) RequestSender {
+	return &TGBotAPIRequestSender{
+		Client: http.DefaultClient,
+		APIToken: token,
+		APIHost: "https://api.telegram.org/",
+	} 
+}
+
+type TGBotAPIRequestSender struct {
 	Client   *http.Client
 	APIToken string
 	APIHost  string
 }
 
-func (s *DefaultRequestSender) Send(obj APIMethod) (apiResp *APIResponse, err error) {
+func (s *TGBotAPIRequestSender) Send(obj APIMethod) (apiResp *APIResponse, err error) {
 	return s.SendWithContext(context.Background(), obj)
 }
 
-func (s *DefaultRequestSender) SendWithContext(ctx context.Context, obj APIMethod) (apiResp *APIResponse, err error) {
+func (s *TGBotAPIRequestSender) SendWithContext(ctx context.Context, obj APIMethod) (apiResp *APIResponse, err error) {
 	if obj == nil {
 		return nil, fmt.Errorf("obj can't be empty")
 	}
@@ -101,11 +109,11 @@ func (s *DefaultRequestSender) SendWithContext(ctx context.Context, obj APIMetho
 	return s.send(ctx, obj.Method(), payload, obj.ContentType())
 }
 
-func (s *DefaultRequestSender) SendRaw(method string, obj any) (apiResp *APIResponse, err error) {
+func (s *TGBotAPIRequestSender) SendRaw(method string, obj any) (apiResp *APIResponse, err error) {
 	return s.SendRawWithContext(context.Background(), method, obj)
 }
 
-func (s *DefaultRequestSender) SendRawWithContext(ctx context.Context, method string, obj any) (apiResp *APIResponse, err error) {
+func (s *TGBotAPIRequestSender) SendRawWithContext(ctx context.Context, method string, obj any) (apiResp *APIResponse, err error) {
 	if method == "" {
 		return nil, fmt.Errorf("method can't be empty")
 	}
@@ -127,7 +135,7 @@ func (s *DefaultRequestSender) SendRawWithContext(ctx context.Context, method st
 	return s.send(ctx, method, payload, "application/json")
 }
 
-func (s *DefaultRequestSender) send(ctx context.Context, method string, payload io.Reader, contentType string) (apiResp *APIResponse, err error) {
+func (s *TGBotAPIRequestSender) send(ctx context.Context, method string, payload io.Reader, contentType string) (apiResp *APIResponse, err error) {
 	if s.Client == nil {
 		s.Client = http.DefaultClient
 	}

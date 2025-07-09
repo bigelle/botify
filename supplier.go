@@ -1,8 +1,13 @@
 package botify
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
+	"io"
+	"log"
+	"net/http"
 	"time"
 )
 
@@ -13,9 +18,10 @@ type UpdateSupplier interface {
 type LongPollingSupplier struct {
 	Sender RequestSender
 
-	Offset         int
-	Limit          int
-	Timeout        int
+	Offset  int
+	Limit   int
+	Timeout int
+	// TODO: it should be filled by bot accoriding to the list of registered handlers
 	AllowedUpdates *[]string
 }
 
@@ -85,11 +91,90 @@ func (e *LongPollingSupplier) SendRawWithContext(ctx context.Context, method str
 	return e.Sender.SendRawWithContext(ctx, method, obj)
 }
 
-type WebhookEngine struct {
-	// TODO: setWebhook params
+type WebhookSupplier struct {
+	url                string
+	certificate        InputFile
+	ipAddress          string
+	maxConnections     int
+	allowedUpdates     *[]string
+	dropPendingUpdates bool
+	secretToken        string
+
+	addr string
 }
 
-func (e *WebhookEngine) GetUpdates(ctx context.Context, chUpdate chan<- Update) error {
-	// TODO:
-	return nil
+func NewWebhookSupplier(url string) *WebhookSupplier {
+	return &WebhookSupplier{
+		url: url,
+
+		addr: ":8080",
+	}
+}
+
+func (ws *WebhookSupplier) GetUpdates(ctx context.Context, chUpdate chan<- Update) error {
+	mux := http.NewServeMux()
+
+	mux.HandleFunc("/webhook", ws.handlerFunc(chUpdate))
+
+	server := &http.Server{
+		Addr:    ws.addr,
+		Handler: mux,
+	}
+
+	serverErr := make(chan error, 1)
+
+	go func() {
+		log.Printf("Listening and serving on %s", ws.addr)
+		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			serverErr <- err
+		}
+	}()
+
+	select {
+	case <-ctx.Done():
+		log.Printf("Stopping server")
+
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+
+		if err := server.Shutdown(shutdownCtx); err != nil {
+			log.Printf("error while stopping server: %v", err)
+			return err
+		}
+
+		log.Print("Server is stopped")
+		return ctx.Err()
+
+	case err := <-serverErr:
+		log.Printf("Server error: %v", err)
+		return err
+	}
+}
+
+func (ws *WebhookSupplier) handlerFunc(chUpdate chan<- Update) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		defer r.Body.Close()
+
+		if r.Method != "POST" {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+
+		b, _ := io.ReadAll(r.Body)
+
+		dec := json.NewDecoder(bytes.NewReader(b))
+		// dec.DisallowUnknownFields() //FIXME:
+
+		var upd Update
+		if err := dec.Decode(&upd); err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			log.Printf("parsing body: %s", err.Error())
+			fmt.Println(string(b))
+			return
+		}
+
+		chUpdate <- upd
+
+		w.WriteHeader(http.StatusOK)
+	}
 }
