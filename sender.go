@@ -37,7 +37,15 @@ type APIResponse struct {
 }
 
 func (r *APIResponse) BindResult(dest any) error {
-	return json.NewDecoder(bytes.NewReader(r.Result)).Decode(dest)
+	dec := json.NewDecoder(bytes.NewReader(r.Result))
+	dec.DisallowUnknownFields()
+
+	if err := dec.Decode(dest); err != nil {
+		fmt.Println(string(r.Result))
+		return fmt.Errorf("binding result: %w", err)
+	}
+
+	return  nil
 }
 
 func (r *APIResponse) IsSuccessful() bool {

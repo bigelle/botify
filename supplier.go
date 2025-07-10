@@ -8,6 +8,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"strings"
 	"time"
 )
 
@@ -26,6 +27,10 @@ type LongPollingSupplier struct {
 }
 
 func (e *LongPollingSupplier) GetUpdates(ctx context.Context, chUpdate chan<- Update) error {
+	if e.Sender == nil {
+		return fmt.Errorf("long polling bot requires request sender")
+	}
+
 	for {
 		select {
 		case <-ctx.Done():
@@ -63,68 +68,42 @@ func (e *LongPollingSupplier) GetUpdates(ctx context.Context, chUpdate chan<- Up
 	}
 }
 
-func (e *LongPollingSupplier) Send(obj APIMethod) (*APIResponse, error) {
-	if e.Sender == nil {
-		return nil, fmt.Errorf("request sender is empty")
-	}
-	return e.Sender.Send(obj)
-}
-
-func (e *LongPollingSupplier) SendWithContext(ctx context.Context, obj APIMethod) (*APIResponse, error) {
-	if e.Sender == nil {
-		return nil, fmt.Errorf("request sender is empty")
-	}
-	return e.Sender.SendWithContext(ctx, obj)
-}
-
-func (e *LongPollingSupplier) SendRaw(method string, obj any) (*APIResponse, error) {
-	if e.Sender == nil {
-		return nil, fmt.Errorf("request sender is empty")
-	}
-	return e.Sender.SendRaw(method, obj)
-}
-
-func (e *LongPollingSupplier) SendRawWithContext(ctx context.Context, method string, obj any) (*APIResponse, error) {
-	if e.Sender == nil {
-		return nil, fmt.Errorf("request sender is empty")
-	}
-	return e.Sender.SendRawWithContext(ctx, method, obj)
-}
-
 type WebhookSupplier struct {
-	url                string
-	certificate        InputFile
-	ipAddress          string
-	maxConnections     int
-	allowedUpdates     *[]string
-	dropPendingUpdates bool
-	secretToken        string
-
-	addr string
-}
-
-func NewWebhookSupplier(url string) *WebhookSupplier {
-	return &WebhookSupplier{
-		url: url,
-
-		addr: ":8080",
-	}
+	// In format https://example.com
+	Domain string
+	// Webhook Path.
+	Path string
+	// Address for the server.
+	// Telegram Bot API works only with port 443, 80, 88 and 8443
+	Addr string
+	// Optional.
+	Certificate InputFile
+	// Optional.
+	IPAddress string
+	// Optional.
+	MaxConnections int
+	// Optional.
+	AllowedUpdates *[]string
+	// Optional.
+	DropPendingUpdates bool
+	// Optional.
+	SecretToken string
 }
 
 func (ws *WebhookSupplier) GetUpdates(ctx context.Context, chUpdate chan<- Update) error {
 	mux := http.NewServeMux()
 
-	mux.HandleFunc("/webhook", ws.handlerFunc(chUpdate))
+	mux.HandleFunc(ws.Path, ws.handlerFunc(chUpdate))
 
 	server := &http.Server{
-		Addr:    ws.addr,
+		Addr:    ws.Addr,
 		Handler: mux,
 	}
 
 	serverErr := make(chan error, 1)
 
 	go func() {
-		log.Printf("Listening and serving on %s", ws.addr)
+		log.Printf("Listening and serving on %s", ws.Addr)
 		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			serverErr <- err
 		}
@@ -160,6 +139,14 @@ func (ws *WebhookSupplier) handlerFunc(chUpdate chan<- Update) http.HandlerFunc 
 			return
 		}
 
+		if ws.SecretToken != "" {
+			t := r.Header.Get("X-Telegram-Bot-Api-Secret-Token")
+			if ws.SecretToken != t {
+				w.WriteHeader(http.StatusUnauthorized)
+				return
+			}
+		}
+
 		b, _ := io.ReadAll(r.Body)
 
 		dec := json.NewDecoder(bytes.NewReader(b))
@@ -177,4 +164,11 @@ func (ws *WebhookSupplier) handlerFunc(chUpdate chan<- Update) http.HandlerFunc 
 
 		w.WriteHeader(http.StatusOK)
 	}
+}
+
+func (ws *WebhookSupplier) HandlePath(path string) {
+	if !strings.HasPrefix(path, "/") {
+		path = "/" + path
+	}
+	ws.Path = path
 }

@@ -3,7 +3,7 @@ package botify
 import (
 	"context"
 	"fmt"
-	"net/http"
+	"net/url"
 	"runtime"
 )
 
@@ -86,7 +86,7 @@ func (b *Bot) Serve() error {
 	var wh WebhookInfo
 	err = r.BindResult(&wh)
 	if err != nil {
-		return err
+		return fmt.Errorf("reading API response: %w", err)
 	}
 
 	if _, ok := b.supplier.(*LongPollingSupplier); ok && wh.URL != "" {
@@ -94,14 +94,20 @@ func (b *Bot) Serve() error {
 	}
 
 	if ws, ok := b.supplier.(*WebhookSupplier); ok && wh.URL == "" {
+		whURL := ws.Domain + ws.Path
+		_, err := url.Parse(whURL)
+		if err != nil {
+			return fmt.Errorf("invalid webhook URL: %w", err)
+		}
+
 		swh := SetWebhook{
-			URL:                ws.url,
-			Certificate:        ws.certificate,
-			IPAddress:          ws.ipAddress,
-			MaxConnections:     ws.maxConnections,
-			AllowedUpdates:     ws.allowedUpdates,
-			DropPendingUpdates: ws.dropPendingUpdates,
-			SecretToken:        ws.secretToken,
+			URL:                whURL,
+			Certificate:        ws.Certificate,
+			IPAddress:          ws.IPAddress,
+			MaxConnections:     ws.MaxConnections,
+			AllowedUpdates:     ws.AllowedUpdates,
+			DropPendingUpdates: ws.DropPendingUpdates,
+			SecretToken:        ws.SecretToken,
 		}
 
 		r, err = b.sender.Send(&swh)
@@ -138,17 +144,13 @@ func (b *Bot) Serve() error {
 }
 
 func DefaultLongPollingBot(token string) *Bot {
-	sender := TGBotAPIRequestSender{
-		Client:   http.DefaultClient,
-		APIToken: token,
-		APIHost:  "https://api.telegram.org/",
-	}
+	sender := DefaultRequestSender(token)
 
 	bot := Bot{
 		handlers: make(map[UpdateType]HandlerFunc),
-		sender:   &sender,
+		sender:   sender,
 		supplier: &LongPollingSupplier{
-			Sender:         &sender,
+			Sender:         sender,
 			Offset:         0,
 			Timeout:        30,
 			Limit:          100,
