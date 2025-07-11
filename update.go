@@ -106,12 +106,12 @@ type Context struct {
 
 func (c *Context) Send(obj APIMethod) (*APIResponse, error) {
 	// NOTE: maybe i should store some info about the obj for logging
-	return c.bot.sender.SendWithContext(c.ctx, obj)
+	return c.bot.Sender.SendWithContext(c.ctx, obj)
 }
 
 func (c *Context) SendRaw(method string, obj any) (*APIResponse, error) {
 	// NOTE: same here also
-	return c.bot.sender.SendRawWithContext(c.ctx, method, obj)
+	return c.bot.Sender.SendRawWithContext(c.ctx, method, obj)
 }
 
 // Use it to make sure that you're working with the expected Update type
