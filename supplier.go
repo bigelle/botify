@@ -8,12 +8,33 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"slices"
 	"strings"
 	"time"
 )
 
 type UpdateSupplier interface {
 	GetUpdates(context.Context, chan<- Update) error
+	AllowUpdate(upds ...UpdateType) // maybe it should'nt be a part of the interface?
+}
+
+func allowUpdate(list []string, upds ...UpdateType) {
+	if list == nil {
+		list = []string{}
+	}
+
+	list = slices.Grow(list, len(upds))
+
+	for _, upd := range upds {
+		if upd == UpdateTypeAll {
+			// TODO: add every possible update type
+			return
+		}
+
+		if !slices.Contains(list, upd.String()) {
+			list = append(list, upd.String())
+		}
+	}
 }
 
 type LongPollingSupplier struct {
@@ -24,6 +45,10 @@ type LongPollingSupplier struct {
 	Timeout int
 	// TODO: it should be filled by bot accoriding to the list of registered handlers
 	AllowedUpdates *[]string
+}
+
+func (lps *LongPollingSupplier) AllowUpdate(upd ...UpdateType) {
+	allowUpdate(*lps.AllowedUpdates, upd...)
 }
 
 func (e *LongPollingSupplier) GetUpdates(ctx context.Context, chUpdate chan<- Update) error {
@@ -88,6 +113,10 @@ type WebhookSupplier struct {
 	DropPendingUpdates bool
 	// Optional.
 	SecretToken string
+}
+
+func (ws *WebhookSupplier) AllowUpdate(upds ...UpdateType) {
+	allowUpdate(*ws.AllowedUpdates, upds...)
 }
 
 func (ws *WebhookSupplier) GetUpdates(ctx context.Context, chUpdate chan<- Update) error {

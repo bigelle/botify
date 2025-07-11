@@ -126,6 +126,10 @@ func (b *Bot) Serve() error {
 		}
 	}
 
+	for upd, _ := range b.handlers {
+		b.supplier.AllowUpdate(upd)
+	}
+
 	ctx, cancel := context.WithCancel(context.Background())
 	b.ctx = ctx
 	b.cancel = cancel

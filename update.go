@@ -1,35 +1,37 @@
 package botify
 
-import "fmt"
+import (
+	"context"
+	"fmt"
+)
 
 type UpdateType string
 
 const (
-	UpdateTypeNone                    UpdateType = "none"
 	UpdateTypeAll                     UpdateType = "all"
 	UpdateTypeMessage                 UpdateType = "message"
-	UpdateTypeEditedMessage           UpdateType = "editedmessage"
-	UpdateTypeChannelPost             UpdateType = "channelpost"
-	UpdateTypeEditedChannelPost       UpdateType = "editedchannelpost"
-	UpdateTypeBusinessConnection      UpdateType = "businessconnection"
-	UpdateTypeBusinessMessage         UpdateType = "businessmessage"
-	UpdateTypeEditedBusinessMessage   UpdateType = "editedbusinessmessage"
-	UpdateTypeDeletedBusinessMessages UpdateType = "deletedbusinessmessages"
-	UpdateTypeMessageReaction         UpdateType = "messagereaction"
-	UpdateTypeMessageReactionCount    UpdateType = "messagereactioncount"
-	UpdateTypeInlineQuery             UpdateType = "inlinequery"
-	UpdateTypeChosenInlineResult      UpdateType = "choseninlineresult"
-	UpdateTypeCallbackQuery           UpdateType = "callbackquery"
-	UpdateTypeShippingQuery           UpdateType = "shippingquery"
-	UpdateTypePreCheckoutQuery        UpdateType = "precheckoutquery"
-	UpdateTypePurchasedPaidMedia      UpdateType = "purchasedpaidmedia"
+	UpdateTypeEditedMessage           UpdateType = "edited_message"
+	UpdateTypeChannelPost             UpdateType = "channel_post"
+	UpdateTypeEditedChannelPost       UpdateType = "edited_channel_post"
+	UpdateTypeBusinessConnection      UpdateType = "business_connection"
+	UpdateTypeBusinessMessage         UpdateType = "business_message"
+	UpdateTypeEditedBusinessMessage   UpdateType = "edited_business_message"
+	UpdateTypeDeletedBusinessMessages UpdateType = "deleted_business_messages"
+	UpdateTypeMessageReaction         UpdateType = "message_reaction"
+	UpdateTypeMessageReactionCount    UpdateType = "message_reaction_count"
+	UpdateTypeInlineQuery             UpdateType = "inline_query"
+	UpdateTypeChosenInlineResult      UpdateType = "chosen_inline_result"
+	UpdateTypeCallbackQuery           UpdateType = "callback_query"
+	UpdateTypeShippingQuery           UpdateType = "shipping_query"
+	UpdateTypePreCheckoutQuery        UpdateType = "pre_checkout_query"
+	UpdateTypePurchasedPaidMedia      UpdateType = "purchased_paid_media"
 	UpdateTypePoll                    UpdateType = "poll"
-	UpdateTypePollAnswer              UpdateType = "pollanswer"
-	UpdateTypeMyChatMember            UpdateType = "mychatmember"
-	UpdateTypeChatMember              UpdateType = "chatmember"
-	UpdateTypeChatJoinRequest         UpdateType = "chatjoinrequest"
-	UpdateTypeChatBoost               UpdateType = "chatboost"
-	UpdateTypeRemovedChatBoost        UpdateType = "removedchatboost"
+	UpdateTypePollAnswer              UpdateType = "poll_answer"
+	UpdateTypeMyChatMember            UpdateType = "my_chat_member"
+	UpdateTypeChatMember              UpdateType = "chat_member"
+	UpdateTypeChatJoinRequest         UpdateType = "chat_join_request"
+	UpdateTypeChatBoost               UpdateType = "chat_boost"
+	UpdateTypeRemovedChatBoost        UpdateType = "removed_chat_boost"
 )
 
 func (t UpdateType) String() string {
@@ -38,8 +40,8 @@ func (t UpdateType) String() string {
 
 type UpdateTypeCommand UpdateType
 
-func (c UpdateTypeCommand) String() string{
-	return  fmt.Sprintf(`command ("%s")`, string(c))
+func (c UpdateTypeCommand) String() string {
+	return fmt.Sprintf(`command ("%s")`, string(c))
 }
 
 type Update struct {
@@ -88,7 +90,7 @@ func (u *Update) UpdateType() UpdateType {
 	if u.EditedBusinessMessage != nil {
 		return UpdateTypeEditedBusinessMessage
 	}
-	return UpdateTypeNone
+	return UpdateTypeAll
 }
 
 type HandlerFunc func(ctx Context)
@@ -98,16 +100,18 @@ type Context struct {
 
 	updType UpdateType
 	upd     *Update
+
+	ctx context.Context
 }
 
 func (c *Context) Send(obj APIMethod) (*APIResponse, error) {
 	// NOTE: maybe i should store some info about the obj for logging
-	return c.bot.sender.Send(obj)
+	return c.bot.sender.SendWithContext(c.ctx, obj)
 }
 
 func (c *Context) SendRaw(method string, obj any) (*APIResponse, error) {
 	// NOTE: same here also
-	return c.bot.sender.SendRaw(method, obj)
+	return c.bot.sender.SendRawWithContext(c.ctx, method, obj)
 }
 
 // Use it to make sure that you're working with the expected Update type
@@ -117,6 +121,22 @@ func (c *Context) UpdateType() UpdateType {
 
 func (c *Context) UpdateID() int {
 	return c.upd.UpdateID
+}
+
+func (c *Context) Context() context.Context {
+	return c.Context()
+}
+
+func (c *Context) SetValue(key, val any) {
+	ctx := c.Context()
+
+	withVal := context.WithValue(ctx, key, val)
+
+	c.ctx = withVal
+}
+
+func (c *Context) Value(key any) any {
+	return c.ctx.Value(key)
 }
 
 // It is safe to call for Message() if the handler is subscribed to UpdateTypeMessage,

@@ -154,7 +154,8 @@ func (m *SetWebhook) multipart() (io.Reader, error) {
 	}
 
 	if m.AllowedUpdates != nil {
-		b, err := json.Marshal(m.AllowedUpdates)
+		var b []byte
+		b, err = json.Marshal(m.AllowedUpdates)
 		if err != nil {
 			return nil, fmt.Errorf("encoding allowed updates as JSON: %w", err)
 		}
