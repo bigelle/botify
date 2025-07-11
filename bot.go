@@ -126,7 +126,7 @@ func (b *Bot) Serve() error {
 		}
 	}
 
-	for upd, _ := range b.handlers {
+	for upd := range b.handlers {
 		b.supplier.AllowUpdate(upd)
 	}
 
