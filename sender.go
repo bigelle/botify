@@ -42,7 +42,6 @@ func (r *APIResponse) BindResult(dest any) error {
 	dec.DisallowUnknownFields()
 
 	if err := dec.Decode(dest); err != nil {
-		fmt.Println(string(r.Result))
 		return fmt.Errorf("binding result: %w", err)
 	}
 

@@ -192,7 +192,6 @@ func (ws *WebhookSupplier) handlerFunc(chUpdate chan<- Update) http.HandlerFunc 
 		if err := dec.Decode(&upd); err != nil {
 			w.WriteHeader(http.StatusBadRequest)
 			log.Printf("parsing body: %s", err.Error())
-			fmt.Println(string(b))
 			return
 		}
 
