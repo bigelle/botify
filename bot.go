@@ -7,46 +7,42 @@ import (
 	"runtime"
 )
 
+func DefaultBot(token string) *Bot {
+	sender := DefaultRequestSender(token)
+
+	bot := Bot{
+		Token:    token,
+		Handlers: make(map[UpdateType]HandlerFunc),
+		Sender:   sender,
+		Supplier: &LongPollingSupplier{
+			Sender:         sender,
+			Offset:         0,
+			Timeout:        30,
+			Limit:          100,
+			AllowedUpdates: &[]string{},
+		},
+
+		BufSize:    0,
+		WorkerPool: runtime.NumCPU(),
+	}
+
+	return &bot
+}
+
 type Bot struct {
 	// configurable
-	Handlers   map[UpdateType]HandlerFunc
-	Sender     RequestSender
-	Supplier   UpdateSupplier
+	Token    string
+	Handlers map[UpdateType]HandlerFunc
+	Sender   RequestSender
+	Supplier UpdateSupplier
+
 	BufSize    int
 	WorkerPool int
 
 	// runtime
-	chUpdate   chan Update
-	ctx        context.Context
-	cancel     context.CancelFunc
-	isOnline   bool
-	hasWebhook bool
-}
-
-func (b *Bot) work() {
-	for {
-		select {
-		case <-b.ctx.Done():
-			return
-
-		case upd := <-b.chUpdate:
-			ctx := Context{
-				bot:     b,
-				updType: upd.UpdateType(),
-				upd:     &upd,
-			}
-
-			exact, ok := b.Handlers[ctx.updType]
-			if ok {
-				exact(ctx)
-			}
-
-			all, ok := b.Handlers[UpdateTypeAll]
-			if ok {
-				all(ctx)
-			}
-		}
-	}
+	chUpdate chan Update
+	ctx      context.Context
+	cancel   context.CancelFunc
 }
 
 func (b *Bot) Handle(t UpdateType, handler HandlerFunc) {
@@ -56,7 +52,14 @@ func (b *Bot) Handle(t UpdateType, handler HandlerFunc) {
 	b.Handlers[t] = handler
 }
 
+func (b *Bot) HandleCommand(cmd string, handler HandlerFunc) {
+	// TODO:
+}
+
+// TODO: simplify it
 func (b *Bot) Serve() error {
+	b.init()
+
 	r, err := b.Sender.Send(GetWebhookInfo)
 	if err != nil {
 		return fmt.Errorf("requesting for webhook info: %w", err)
@@ -73,7 +76,8 @@ func (b *Bot) Serve() error {
 	}
 
 	if ws, ok := b.Supplier.(*WebhookSupplier); ok && wh.URL == "" {
-		whURL := ws.Domain + ws.Path
+		whURL := ws.WebhookURL()
+
 		_, err := url.Parse(whURL)
 		if err != nil {
 			return fmt.Errorf("invalid webhook URL: %w", err)
@@ -106,17 +110,7 @@ func (b *Bot) Serve() error {
 	}
 
 	for upd := range b.Handlers {
-		b.Supplier.AllowUpdate(upd)
-	}
-
-	ctx, cancel := context.WithCancel(context.Background())
-	b.ctx = ctx
-	b.cancel = cancel
-
-	b.chUpdate = make(chan Update, b.BufSize)
-
-	if b.WorkerPool == 0 {
-		b.WorkerPool = runtime.NumCPU()
+		b.Supplier.AllowUpdate(upd.String())
 	}
 
 	for range b.WorkerPool {
@@ -126,22 +120,63 @@ func (b *Bot) Serve() error {
 	return b.Supplier.GetUpdates(b.ctx, b.chUpdate)
 }
 
-func DefaultLongPollingBot(token string) *Bot {
-	sender := DefaultRequestSender(token)
-
-	bot := Bot{
-		Handlers: make(map[UpdateType]HandlerFunc),
-		Sender:   sender,
-		Supplier: &LongPollingSupplier{
-			Sender:         sender,
-			Offset:         0,
-			Timeout:        30,
-			Limit:          100,
-			AllowedUpdates: &[]string{},
-		},
-		BufSize:    0,
-		WorkerPool: runtime.NumCPU(),
+func (b *Bot) init() {
+	if b.Token == "" {
+		panic("API token must not be empty")
 	}
 
-	return &bot
+	if b.Sender == nil {
+		b.Sender = DefaultRequestSender(b.Token)
+	}
+
+	if b.Supplier == nil {
+		b.Supplier = &LongPollingSupplier{
+			Sender: b.Sender,
+
+			AllowedUpdates: &[]string{},
+			Timeout:        30,
+			Offset:         0,
+			Limit:          100,
+		}
+	}
+
+	if b.Handlers == nil {
+		b.Handlers = make(map[UpdateType]HandlerFunc)
+	}
+
+	if b.BufSize < 0 {
+		b.BufSize = 0
+	}
+
+	if b.WorkerPool <= 0 {
+		b.WorkerPool = runtime.NumCPU()
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	b.ctx = ctx
+	b.cancel = cancel
+
+	b.chUpdate = make(chan Update, b.BufSize)
+}
+
+func (b *Bot) work() {
+	for {
+		select {
+		case <-b.ctx.Done():
+			return
+
+		case upd := <-b.chUpdate:
+			ctx := Context{
+				bot:     b,
+				updType: upd.UpdateType(),
+				upd:     &upd,
+			}
+
+			handler, ok := b.Handlers[ctx.updType]
+			if ok {
+				handler(ctx)
+			}
+
+		}
+	}
 }

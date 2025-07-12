@@ -15,10 +15,10 @@ import (
 
 type UpdateSupplier interface {
 	GetUpdates(context.Context, chan<- Update) error
-	AllowUpdate(upds ...UpdateType) // maybe it should'nt be a part of the interface?
+	AllowUpdate(upds ...string) // maybe it should'nt be a part of the interface?
 }
 
-func allowUpdate(list []string, upds ...UpdateType) {
+func allowUpdate(list []string, upds ...string) {
 	if list == nil {
 		list = []string{}
 	}
@@ -26,13 +26,8 @@ func allowUpdate(list []string, upds ...UpdateType) {
 	list = slices.Grow(list, len(upds))
 
 	for _, upd := range upds {
-		if upd == UpdateTypeAll {
-			// TODO: add every possible update type
-			return
-		}
-
-		if !slices.Contains(list, upd.String()) {
-			list = append(list, upd.String())
+		if !slices.Contains(list, upd) {
+			list = append(list, upd)
 		}
 	}
 }
@@ -40,14 +35,13 @@ func allowUpdate(list []string, upds ...UpdateType) {
 type LongPollingSupplier struct {
 	Sender RequestSender
 
-	Offset  int
-	Limit   int
-	Timeout int
-	// TODO: it should be filled by bot accoriding to the list of registered handlers
+	Offset         int
+	Limit          int
+	Timeout        int
 	AllowedUpdates *[]string
 }
 
-func (lps *LongPollingSupplier) AllowUpdate(upd ...UpdateType) {
+func (lps *LongPollingSupplier) AllowUpdate(upd ...string) {
 	allowUpdate(*lps.AllowedUpdates, upd...)
 }
 
@@ -98,9 +92,10 @@ type WebhookSupplier struct {
 	Domain string
 	// Webhook Path.
 	Path string
-	// Address for the server.
-	// Telegram Bot API works only with port 443, 80, 88 and 8443
-	Addr string
+	// Will be send to the Telegram Bot API server
+	ExposedPort string
+	// Will be used to run the webhook server
+	ListenAddr string
 	// Optional.
 	Certificate InputFile
 	// Optional.
@@ -115,8 +110,16 @@ type WebhookSupplier struct {
 	SecretToken string
 }
 
-func (ws *WebhookSupplier) AllowUpdate(upds ...UpdateType) {
+func (ws *WebhookSupplier) AllowUpdate(upds ...string) {
 	allowUpdate(*ws.AllowedUpdates, upds...)
+}
+
+func (ws *WebhookSupplier) WebhookURL() string {
+	port := ""
+	if ws.ExposedPort != "" && ws.ExposedPort != "443" {
+		port = ":" + ws.ExposedPort
+	}
+	return fmt.Sprintf("https://%s%s/%s", ws.Domain, port, ws.Path)
 }
 
 func (ws *WebhookSupplier) GetUpdates(ctx context.Context, chUpdate chan<- Update) error {
@@ -124,15 +127,19 @@ func (ws *WebhookSupplier) GetUpdates(ctx context.Context, chUpdate chan<- Updat
 
 	mux.HandleFunc(ws.Path, ws.handlerFunc(chUpdate))
 
+	if ws.ListenAddr == "" {
+		ws.ListenAddr = ":443"
+	}
+
 	server := &http.Server{
-		Addr:    ws.Addr,
+		Addr:    ws.ListenAddr,
 		Handler: mux,
 	}
 
 	serverErr := make(chan error, 1)
 
 	go func() {
-		log.Printf("Listening and serving on %s", ws.Addr)
+		log.Printf("Listening and serving on %s", ws.ExposedPort)
 		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			serverErr <- err
 		}

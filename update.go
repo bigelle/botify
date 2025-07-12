@@ -8,7 +8,7 @@ import (
 type UpdateType string
 
 const (
-	UpdateTypeAll                     UpdateType = "all"
+	updateTypeUnreachable             UpdateType = ""
 	UpdateTypeMessage                 UpdateType = "message"
 	UpdateTypeEditedMessage           UpdateType = "edited_message"
 	UpdateTypeChannelPost             UpdateType = "channel_post"
@@ -90,7 +90,7 @@ func (u *Update) UpdateType() UpdateType {
 	if u.EditedBusinessMessage != nil {
 		return UpdateTypeEditedBusinessMessage
 	}
-	return UpdateTypeAll
+	return updateTypeUnreachable
 }
 
 type HandlerFunc func(ctx Context)
