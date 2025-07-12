@@ -32,6 +32,7 @@ func (m MethodWithNoParams) Payload() (io.Reader, error) {
 
 const (
 	GetWebhookInfo MethodWithNoParams = "getWebhookInfo"
+	Close          MethodWithNoParams = "close"
 )
 
 type GetUpdates struct {
@@ -171,7 +172,7 @@ func (m *SetWebhook) multipart() (io.Reader, error) {
 			return nil, fmt.Errorf("writing form field: %w", err)
 		}
 	}
-	
+
 	if m.SecretToken != "" {
 		err = mw.WriteField("secret_token", m.SecretToken)
 		if err != nil {

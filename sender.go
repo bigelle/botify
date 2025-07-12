@@ -33,6 +33,7 @@ type APIResponse struct {
 	Ok          bool                `json:"ok"`
 	Description string              `json:"description"`
 	Result      json.RawMessage     `json:"result"`
+	ErrorCode   int                 `json:"error_code"`
 	Parameters  *ResponseParameters `json:"parameters"`
 }
 
@@ -45,7 +46,7 @@ func (r *APIResponse) BindResult(dest any) error {
 		return fmt.Errorf("binding result: %w", err)
 	}
 
-	return  nil
+	return nil
 }
 
 func (r *APIResponse) IsSuccessful() bool {
@@ -60,14 +61,14 @@ func (r *APIResponse) GetError() error {
 	if r.Parameters != nil {
 		params := r.Parameters
 		if params.MigrateToChatID != nil {
-			return ChatMigratedError(*params.MigrateToChatID)
+			return fmt.Errorf("%d: %w", r.ErrorCode, ChatMigratedError(*params.MigrateToChatID))
 		}
 		if params.RetryAfter != nil {
-			return TooManyRequestsError(*params.RetryAfter)
+			return fmt.Errorf("%d: %w", r.ErrorCode, TooManyRequestsError(*params.RetryAfter))
 		}
 	}
 
-	return BadRequestError(r.Description)
+	return fmt.Errorf("%d: %s", r.ErrorCode, BadRequestError(r.Description))
 }
 
 type ResponseParameters struct {
@@ -83,10 +84,10 @@ type RequestSender interface {
 
 func DefaultRequestSender(token string) RequestSender {
 	return &TGBotAPIRequestSender{
-		Client: http.DefaultClient,
+		Client:   http.DefaultClient,
 		APIToken: token,
-		APIHost: "https://api.telegram.org/",
-	} 
+		APIHost:  "https://api.telegram.org/",
+	}
 }
 
 type TGBotAPIRequestSender struct {

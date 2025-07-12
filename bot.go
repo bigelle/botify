@@ -113,11 +113,33 @@ func (b *Bot) Serve() error {
 		b.Supplier.AllowUpdate(upd.String())
 	}
 
+	defer b.Shutdown()
+
 	for range b.WorkerPool {
 		go b.work()
 	}
 
 	return b.Supplier.GetUpdates(b.ctx, b.chUpdate)
+}
+
+// TODO: make it more graceful
+func (b *Bot) Shutdown() error {
+	b.cancel()
+	close(b.chUpdate)
+
+	resp, err := b.Sender.Send(Close)
+	if err != nil {
+		return err
+	}
+
+	if !resp.IsSuccessful() {
+		// i mean do i care if it was closed too early?
+		if resp.ErrorCode != 429 {
+			return resp.GetError()
+		}
+	}
+
+	return nil
 }
 
 func (b *Bot) init() {
