@@ -203,7 +203,7 @@ type SendMessage struct {
 	// See https://core.telegram.org/bots/api#formatting-options for more details.
 	ParseMode *string `json:"parse_mode,omitempty,"`
 	// A JSON-serialized list of special entities that appear in message text, which can be specified instead of parse_mode
-	// Entities *MessageEntity `json:"entities,omitempty,"`
+	Entities *MessageEntity `json:"entities,omitempty,"`
 	// Link preview generation options for the message
 	// LinkPreviewOptions *LinkPreviewOptions `json:"link_preview_options,omitempty,"`
 	// Sends the message silently. Users will receive a notification with no sound.

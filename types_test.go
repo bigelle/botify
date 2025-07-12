@@ -45,3 +45,46 @@ func TestChatBoostSource_Deserialization(t *testing.T) {
 		})
 	}
 }
+
+func TestMessage_GetCommand(t *testing.T) {
+	testcases := []struct {
+		Name string
+		Input     Message
+		Output    string
+		ExpectErr bool
+	}{
+		{
+			Name: "1 entity, has text, expect no err",
+			Input: Message{
+				Text: strPointer("/start"),
+				Entities: &[]MessageEntity{
+					{
+						Type: "bot_command",
+						Offset: 0,
+						Length: 6,
+					},
+				},
+			},
+			Output: "/start",
+			ExpectErr: false,
+		},
+	}
+
+	for _, tc := range testcases {
+		t.Run(tc.Name, func(t *testing.T) {
+			cmd, err := tc.Input.GetCommand()
+
+			if tc.ExpectErr {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+			}
+
+			assert.Equal(t, tc.Output, cmd)
+		})
+	}
+}
+
+func strPointer(str string) *string {
+	return  &str
+}

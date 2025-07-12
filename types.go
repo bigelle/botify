@@ -85,7 +85,7 @@ type Message struct {
 	// Optional. For text messages, the actual UTF-8 text of the message
 	Text *string `json:"text,omitempty"`
 	// Optional. For text messages, special entities like usernames, URLs, bot commands, etc. that appear in the text
-	// Entities *[]MessageEntity `json:"entities,omitempty"`
+	Entities *[]MessageEntity `json:"entities,omitempty"`
 	// Optional. Options used for link preview generation for the message,
 	// if it is a text message and link preview options were changed
 	// LinkPreviewOptions *LinkPreviewOptions `json:"link_preview_options,omitempty"`
@@ -115,7 +115,7 @@ type Message struct {
 	// Optional. Caption for the animation, audio, document, paid media, photo, video or voice
 	// Caption *string `json:"caption,omitempty"`
 	// Optional. For messages with a caption, special entities like usernames, URLs, bot commands, etc. that appear in the caption
-	// CaptionEntities *[]MessageEntity `json:"caption_entities,omitempty"`
+	CaptionEntities *[]MessageEntity `json:"caption_entities,omitempty"`
 	// Optional. True, if the caption must be shown above the message media
 	ShowCaptionAboveMedia *bool `json:"show_caption_above_media,omitempty"`
 	// Optional. True, if the message media is covered by a spoiler animation
@@ -232,6 +232,30 @@ type Message struct {
 	// ReplyMarkup *InlineKeyboardMarkup `json:"reply_markup,omitempty"`
 }
 
+func (m *Message) IsCommand() bool {
+	for _, ent := range *m.Entities {
+		if ent.Type == "bot_command" {
+			return true
+		}
+	}
+
+	return false
+}
+
+func (m *Message) GetCommand() (string, error) {
+	if m.Text == nil {
+		return "", fmt.Errorf("the message text is empty")
+	}
+
+	for _, ent := range *m.Entities {
+		if ent.Type == "bot_command" {
+			return (*m.Text)[ent.Offset : ent.Offset+ent.Length], nil
+		}
+	}
+
+	return "", fmt.Errorf("the message has no commands")
+}
+
 type User struct{}
 
 type Chat struct {
@@ -331,3 +355,13 @@ type InputFileLocal struct {
 }
 
 func (i InputFileLocal) iAmAnInputFile() {}
+
+type MessageEntity struct {
+	Type          string `json:"type"`
+	Offset        int    `json:"offset"`
+	Length        int    `json:"length"`
+	URL           string `json:"url,omitempty"`
+	User          User   `json:"user,omitzero"`
+	Language      string `json:"language,omitzero"`
+	CustomEmojiID string `json:"custom_emoji_id,omitzero"`
+}

@@ -2,47 +2,33 @@ package botify
 
 import (
 	"context"
-	"fmt"
 )
-
-type UpdateType string
 
 const (
-	updateTypeUnreachable             UpdateType = ""
-	UpdateTypeMessage                 UpdateType = "message"
-	UpdateTypeEditedMessage           UpdateType = "edited_message"
-	UpdateTypeChannelPost             UpdateType = "channel_post"
-	UpdateTypeEditedChannelPost       UpdateType = "edited_channel_post"
-	UpdateTypeBusinessConnection      UpdateType = "business_connection"
-	UpdateTypeBusinessMessage         UpdateType = "business_message"
-	UpdateTypeEditedBusinessMessage   UpdateType = "edited_business_message"
-	UpdateTypeDeletedBusinessMessages UpdateType = "deleted_business_messages"
-	UpdateTypeMessageReaction         UpdateType = "message_reaction"
-	UpdateTypeMessageReactionCount    UpdateType = "message_reaction_count"
-	UpdateTypeInlineQuery             UpdateType = "inline_query"
-	UpdateTypeChosenInlineResult      UpdateType = "chosen_inline_result"
-	UpdateTypeCallbackQuery           UpdateType = "callback_query"
-	UpdateTypeShippingQuery           UpdateType = "shipping_query"
-	UpdateTypePreCheckoutQuery        UpdateType = "pre_checkout_query"
-	UpdateTypePurchasedPaidMedia      UpdateType = "purchased_paid_media"
-	UpdateTypePoll                    UpdateType = "poll"
-	UpdateTypePollAnswer              UpdateType = "poll_answer"
-	UpdateTypeMyChatMember            UpdateType = "my_chat_member"
-	UpdateTypeChatMember              UpdateType = "chat_member"
-	UpdateTypeChatJoinRequest         UpdateType = "chat_join_request"
-	UpdateTypeChatBoost               UpdateType = "chat_boost"
-	UpdateTypeRemovedChatBoost        UpdateType = "removed_chat_boost"
+	UpdateTypeMessage                 = "message"
+	UpdateTypeEditedMessage           = "edited_message"
+	UpdateTypeChannelPost             = "channel_post"
+	UpdateTypeEditedChannelPost       = "edited_channel_post"
+	UpdateTypeBusinessConnection      = "business_connection"
+	UpdateTypeBusinessMessage         = "business_message"
+	UpdateTypeEditedBusinessMessage   = "edited_business_message"
+	UpdateTypeDeletedBusinessMessages = "deleted_business_messages"
+	UpdateTypeMessageReaction         = "message_reaction"
+	UpdateTypeMessageReactionCount    = "message_reaction_count"
+	UpdateTypeInlineQuery             = "inline_query"
+	UpdateTypeChosenInlineResult      = "chosen_inline_result"
+	UpdateTypeCallbackQuery           = "callback_query"
+	UpdateTypeShippingQuery           = "shipping_query"
+	UpdateTypePreCheckoutQuery        = "pre_checkout_query"
+	UpdateTypePurchasedPaidMedia      = "purchased_paid_media"
+	UpdateTypePoll                    = "poll"
+	UpdateTypePollAnswer              = "poll_answer"
+	UpdateTypeMyChatMember            = "my_chat_member"
+	UpdateTypeChatMember              = "chat_member"
+	UpdateTypeChatJoinRequest         = "chat_join_request"
+	UpdateTypeChatBoost               = "chat_boost"
+	UpdateTypeRemovedChatBoost        = "removed_chat_boost"
 )
-
-func (t UpdateType) String() string {
-	return string(t)
-}
-
-type UpdateTypeCommand UpdateType
-
-func (c UpdateTypeCommand) String() string {
-	return fmt.Sprintf(`command ("%s")`, string(c))
-}
 
 type Update struct {
 	UpdateID          int      `json:"update_id"`
@@ -71,8 +57,12 @@ type Update struct {
 	// RemovedChatBoost        *ChatBoostRemoved            `json:"removed_chat_boost,omitempty"`
 }
 
-func (u *Update) UpdateType() UpdateType {
+func (u *Update) UpdateType() string {
 	if u.Message != nil {
+		if u.Message.IsCommand() {
+			cmd, _ := u.Message.GetCommand()
+			return cmd
+		}
 		return UpdateTypeMessage
 	}
 	if u.EditedMessage != nil {
@@ -90,7 +80,7 @@ func (u *Update) UpdateType() UpdateType {
 	if u.EditedBusinessMessage != nil {
 		return UpdateTypeEditedBusinessMessage
 	}
-	return updateTypeUnreachable
+	return ""
 }
 
 type HandlerFunc func(ctx Context)
@@ -98,7 +88,7 @@ type HandlerFunc func(ctx Context)
 type Context struct {
 	bot *Bot
 
-	updType UpdateType
+	updType string
 	upd     *Update
 
 	ctx context.Context
@@ -115,7 +105,7 @@ func (c *Context) SendRaw(method string, obj any) (*APIResponse, error) {
 }
 
 // Use it to make sure that you're working with the expected Update type
-func (c *Context) UpdateType() UpdateType {
+func (c *Context) UpdateType() string {
 	return c.updType
 }
 

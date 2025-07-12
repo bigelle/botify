@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/url"
 	"runtime"
+	"strings"
 )
 
 func DefaultBot(token string) *Bot {
@@ -12,7 +13,7 @@ func DefaultBot(token string) *Bot {
 
 	bot := Bot{
 		Token:    token,
-		Handlers: make(map[UpdateType]HandlerFunc),
+		Handlers: make(map[string]HandlerFunc),
 		Sender:   sender,
 		Supplier: &LongPollingSupplier{
 			Sender:         sender,
@@ -31,10 +32,10 @@ func DefaultBot(token string) *Bot {
 
 type Bot struct {
 	// configurable
-	Token    string
-	Handlers map[UpdateType]HandlerFunc
-	Sender   RequestSender
-	Supplier UpdateSupplier
+	Token       string
+	Handlers    map[string]HandlerFunc
+	Sender      RequestSender
+	Supplier    UpdateSupplier
 
 	BufSize    int
 	WorkerPool int
@@ -45,15 +46,24 @@ type Bot struct {
 	cancel   context.CancelFunc
 }
 
-func (b *Bot) Handle(t UpdateType, handler HandlerFunc) {
+func (b *Bot) Handle(t string, handler HandlerFunc) {
 	if b.Handlers == nil {
-		b.Handlers = make(map[UpdateType]HandlerFunc)
+		b.Handlers = make(map[string]HandlerFunc)
 	}
+
 	b.Handlers[t] = handler
 }
 
 func (b *Bot) HandleCommand(cmd string, handler HandlerFunc) {
-	// TODO:
+	if b.Handlers == nil {
+		b.Handlers = make(map[string]HandlerFunc)
+	}
+	
+	if !strings.HasPrefix(cmd, "/") {
+		cmd = "/" + cmd
+	}
+
+	b.Handlers[cmd] = handler
 }
 
 // TODO: simplify it
@@ -110,7 +120,7 @@ func (b *Bot) Serve() error {
 	}
 
 	for upd := range b.Handlers {
-		b.Supplier.AllowUpdate(upd.String())
+		b.Supplier.AllowUpdate(upd)
 	}
 
 	defer b.Shutdown()
@@ -163,7 +173,7 @@ func (b *Bot) init() {
 	}
 
 	if b.Handlers == nil {
-		b.Handlers = make(map[UpdateType]HandlerFunc)
+		b.Handlers = make(map[string]HandlerFunc)
 	}
 
 	if b.BufSize < 0 {
