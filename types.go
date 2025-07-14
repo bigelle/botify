@@ -233,6 +233,10 @@ type Message struct {
 }
 
 func (m *Message) IsCommand() bool {
+	if m.Entities == nil {
+		return false
+	}
+
 	for _, ent := range *m.Entities {
 		if ent.Type == "bot_command" {
 			return true

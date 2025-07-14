@@ -12,9 +12,8 @@ func DefaultBot(token string) *Bot {
 	sender := DefaultRequestSender(token)
 
 	bot := Bot{
-		Token:    token,
-		Handlers: make(map[string]HandlerFunc),
-		Sender:   sender,
+		Token:  token,
+		Sender: sender,
 		Supplier: &LongPollingSupplier{
 			Sender:         sender,
 			Offset:         0,
@@ -23,8 +22,11 @@ func DefaultBot(token string) *Bot {
 			AllowedUpdates: &[]string{},
 		},
 
-		BufSize:    0,
-		WorkerPool: runtime.NumCPU(),
+		updateHandlers:  make(map[string]HandlerFunc),
+		commandHandlers: make(map[string]HandlerFunc),
+
+		bufSize:    0,
+		workerPool: runtime.NumCPU(),
 	}
 
 	return &bot
@@ -32,13 +34,15 @@ func DefaultBot(token string) *Bot {
 
 type Bot struct {
 	// configurable
-	Token       string
-	Handlers    map[string]HandlerFunc
-	Sender      RequestSender
-	Supplier    UpdateSupplier
+	Token    string
+	Sender   RequestSender
+	Supplier UpdateSupplier
 
-	BufSize    int
-	WorkerPool int
+	updateHandlers  map[string]HandlerFunc
+	commandHandlers map[string]HandlerFunc
+
+	bufSize    int
+	workerPool int
 
 	// runtime
 	chUpdate chan Update
@@ -47,23 +51,25 @@ type Bot struct {
 }
 
 func (b *Bot) Handle(t string, handler HandlerFunc) {
-	if b.Handlers == nil {
-		b.Handlers = make(map[string]HandlerFunc)
+	if b.updateHandlers == nil {
+		b.updateHandlers = make(map[string]HandlerFunc)
 	}
 
-	b.Handlers[t] = handler
+	if _, ok := allUpdTypes[t]; ok {
+		b.updateHandlers[t] = handler
+	}
 }
 
 func (b *Bot) HandleCommand(cmd string, handler HandlerFunc) {
-	if b.Handlers == nil {
-		b.Handlers = make(map[string]HandlerFunc)
+	if b.commandHandlers == nil {
+		b.commandHandlers = make(map[string]HandlerFunc)
 	}
-	
+
 	if !strings.HasPrefix(cmd, "/") {
 		cmd = "/" + cmd
 	}
 
-	b.Handlers[cmd] = handler
+	b.commandHandlers[cmd] = handler
 }
 
 // TODO: simplify it
@@ -119,13 +125,13 @@ func (b *Bot) Serve() error {
 		}
 	}
 
-	for upd := range b.Handlers {
+	for upd := range b.updateHandlers {
 		b.Supplier.AllowUpdate(upd)
 	}
 
 	defer b.Shutdown()
 
-	for range b.WorkerPool {
+	for range b.workerPool {
 		go b.work()
 	}
 
@@ -172,23 +178,23 @@ func (b *Bot) init() {
 		}
 	}
 
-	if b.Handlers == nil {
-		b.Handlers = make(map[string]HandlerFunc)
+	if b.updateHandlers == nil {
+		b.updateHandlers = make(map[string]HandlerFunc)
 	}
 
-	if b.BufSize < 0 {
-		b.BufSize = 0
+	if b.bufSize < 0 {
+		b.bufSize = 0
 	}
 
-	if b.WorkerPool <= 0 {
-		b.WorkerPool = runtime.NumCPU()
+	if b.workerPool <= 0 {
+		b.workerPool = runtime.NumCPU()
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	b.ctx = ctx
 	b.cancel = cancel
 
-	b.chUpdate = make(chan Update, b.BufSize)
+	b.chUpdate = make(chan Update, b.bufSize)
 }
 
 func (b *Bot) work() {
@@ -204,7 +210,18 @@ func (b *Bot) work() {
 				upd:     &upd,
 			}
 
-			handler, ok := b.Handlers[ctx.updType]
+			if upd.Message != nil && upd.Message.IsCommand() {
+				cmd, _ := upd.Message.GetCommand()
+				cmdHandler, ok := b.commandHandlers[cmd]
+
+				if ok {
+					cmdHandler(ctx)
+				}
+
+				return
+			}
+
+			handler, ok := b.updateHandlers[ctx.updType]
 			if ok {
 				handler(ctx)
 			}

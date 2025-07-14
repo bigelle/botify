@@ -30,6 +30,32 @@ const (
 	UpdateTypeRemovedChatBoost        = "removed_chat_boost"
 )
 
+var allUpdTypes = map[string]struct{}{
+	UpdateTypeMessage:                 {},
+	UpdateTypeEditedMessage:           {},
+	UpdateTypeChannelPost:             {},
+	UpdateTypeEditedChannelPost:       {},
+	UpdateTypeBusinessConnection:      {},
+	UpdateTypeBusinessMessage:         {},
+	UpdateTypeEditedBusinessMessage:   {},
+	UpdateTypeDeletedBusinessMessages: {},
+	UpdateTypeMessageReaction:         {},
+	UpdateTypeMessageReactionCount:    {},
+	UpdateTypeInlineQuery:             {},
+	UpdateTypeChosenInlineResult:      {},
+	UpdateTypeCallbackQuery:           {},
+	UpdateTypeShippingQuery:           {},
+	UpdateTypePreCheckoutQuery:        {},
+	UpdateTypePurchasedPaidMedia:      {},
+	UpdateTypePoll:                    {},
+	UpdateTypePollAnswer:              {},
+	UpdateTypeMyChatMember:            {},
+	UpdateTypeChatMember:              {},
+	UpdateTypeChatJoinRequest:         {},
+	UpdateTypeChatBoost:               {},
+	UpdateTypeRemovedChatBoost:        {},
+}
+
 type Update struct {
 	UpdateID          int      `json:"update_id"`
 	Message           *Message `json:"message,omitempty"`
@@ -84,6 +110,14 @@ func (u *Update) UpdateType() string {
 }
 
 type HandlerFunc func(ctx Context)
+
+func ChainHandlers(handlers ...HandlerFunc) HandlerFunc {
+	return func(ctx Context) {
+		for _, handler := range handlers {
+			handler(ctx)
+		}
+	}
+}
 
 type Context struct {
 	bot *Bot
