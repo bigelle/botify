@@ -369,3 +369,7 @@ type MessageEntity struct {
 	Language      string `json:"language,omitzero"`
 	CustomEmojiID string `json:"custom_emoji_id,omitzero"`
 }
+
+type BotCommandScope interface {
+	Scope() string
+}

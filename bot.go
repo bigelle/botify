@@ -23,7 +23,7 @@ func DefaultBot(token string) *Bot {
 		},
 
 		updateHandlers:  make(map[string]HandlerFunc),
-		commandHandlers: make(map[string]HandlerFunc),
+		commandHandlers: make(map[string]map[string]HandlerFunc),
 
 		bufSize:    0,
 		workerPool: runtime.NumCPU(),
@@ -40,7 +40,7 @@ type Bot struct {
 
 	// only through methods
 	updateHandlers  map[string]HandlerFunc
-	commandHandlers map[string]HandlerFunc
+	commandHandlers map[string]map[string]HandlerFunc
 	bufSize         int
 	workerPool      int
 
@@ -62,16 +62,23 @@ func (b *Bot) Handle(t string, handler HandlerFunc) *Bot {
 	return b
 }
 
-func (b *Bot) HandleCommand(cmd string, handler HandlerFunc) *Bot {
+// Usage:
+//
+//	HandleCommand("/foo", fooHandler) // create a bot command for default scope and handle it with a fooHandler
+//	HandleCommand("/foo", fooHandler, "all_private_chats") // create a bot command for only private chats and handle it with a fooHandler
+func (b *Bot) HandleCommand(cmd string, handler HandlerFunc, params ...any) *Bot {
 	if b.commandHandlers == nil {
-		b.commandHandlers = make(map[string]HandlerFunc)
+		b.commandHandlers = make(map[string]map[string]HandlerFunc)
 	}
 
 	if !strings.HasPrefix(cmd, "/") {
 		cmd = "/" + cmd
 	}
 
-	b.commandHandlers[cmd] = handler
+	if b.commandHandlers["default"] == nil {
+		b.commandHandlers["default"] = make(map[string]HandlerFunc)
+	}
+	b.commandHandlers["default"][cmd] = handler
 
 	return b
 }
@@ -171,7 +178,7 @@ func (b *Bot) init() {
 		b.updateHandlers = make(map[string]HandlerFunc)
 	}
 	if b.commandHandlers == nil {
-		b.commandHandlers = make(map[string]HandlerFunc)
+		b.commandHandlers = make(map[string]map[string]HandlerFunc)
 	}
 
 	if b.bufSize < 0 {
@@ -259,10 +266,12 @@ func (b *Bot) work() {
 
 			if upd.Message != nil && upd.Message.IsCommand() {
 				cmd, _ := upd.Message.GetCommand()
-				cmdHandler, ok := b.commandHandlers[cmd]
 
-				if ok {
-					cmdHandler(ctx)
+				for _, inner := range b.commandHandlers {
+					if cmdHandler, ok := inner[cmd]; ok {
+						cmdHandler(ctx)
+						return
+					}
 				}
 
 				return
