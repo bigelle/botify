@@ -163,10 +163,10 @@ func (c *Context) Value(key any) any {
 	return c.ctx.Value(key)
 }
 
-// It is safe to call for MustMessage() if the handler is subscribed to UpdateTypeMessage,
+// It is safe to call for MustBindMessage() if the handler is subscribed to UpdateTypeMessage,
 // the return value is always non-nil.
 // Otherwise, it will panic.
-func (c *Context) MustMessage() *Message {
+func (c *Context) MustBindMessage() *Message {
 	if c.updType != UpdateTypeMessage {
 		panic("calling MustMessage() when it is known that Update doesn't have any messages")
 	}
@@ -180,6 +180,6 @@ func (c *Context) MustMessage() *Message {
 
 // If you're not sure about the update type, it is safe to use TryMessage() and check for a nil value.
 // It will never panic.
-func (c *Context) TryMessage() *Message {
+func (c *Context) BindMessage() *Message {
 	return c.upd.Message
 }

@@ -38,11 +38,11 @@ type Bot struct {
 	Sender   RequestSender
 	Supplier UpdateSupplier
 
+	// only through methods
 	updateHandlers  map[string]HandlerFunc
 	commandHandlers map[string]HandlerFunc
-
-	bufSize    int
-	workerPool int
+	bufSize         int
+	workerPool      int
 
 	// runtime
 	chUpdate chan Update
@@ -50,7 +50,7 @@ type Bot struct {
 	cancel   context.CancelFunc
 }
 
-func (b *Bot) Handle(t string, handler HandlerFunc) {
+func (b *Bot) Handle(t string, handler HandlerFunc) *Bot {
 	if b.updateHandlers == nil {
 		b.updateHandlers = make(map[string]HandlerFunc)
 	}
@@ -58,9 +58,11 @@ func (b *Bot) Handle(t string, handler HandlerFunc) {
 	if _, ok := allUpdTypes[t]; ok {
 		b.updateHandlers[t] = handler
 	}
+
+	return b
 }
 
-func (b *Bot) HandleCommand(cmd string, handler HandlerFunc) {
+func (b *Bot) HandleCommand(cmd string, handler HandlerFunc) *Bot {
 	if b.commandHandlers == nil {
 		b.commandHandlers = make(map[string]HandlerFunc)
 	}
@@ -70,58 +72,44 @@ func (b *Bot) HandleCommand(cmd string, handler HandlerFunc) {
 	}
 
 	b.commandHandlers[cmd] = handler
+
+	return b
+}
+
+func (b *Bot) WithChannelSize(l int) *Bot {
+	if l >= 0 {
+		b.bufSize = l
+	}
+
+	return b
+}
+
+func (b *Bot) WithWorkerPool(l int) *Bot {
+	if l > 0 {
+		b.workerPool = l
+	}
+
+	return b
 }
 
 // TODO: simplify it
+
 func (b *Bot) Serve() error {
 	b.init()
 
-	r, err := b.Sender.Send(GetWebhookInfo)
+	wh, err := b.getWebhookInfo()
 	if err != nil {
-		return fmt.Errorf("requesting for webhook info: %w", err)
-	}
-
-	var wh WebhookInfo
-	err = r.BindResult(&wh)
-	if err != nil {
-		return fmt.Errorf("reading API response: %w", err)
+		// FIXME: there is a better way to handle this
+		return fmt.Errorf("getting webhook info: %w", err)
 	}
 
 	if _, ok := b.Supplier.(*LongPollingSupplier); ok && wh.URL != "" {
 		return fmt.Errorf("can't use long polling when webhook is set; use deleteWebhook before running long polling bot")
 	}
 
-	if ws, ok := b.Supplier.(*WebhookSupplier); ok && wh.URL == "" {
-		whURL := ws.WebhookURL()
-
-		_, err := url.Parse(whURL)
-		if err != nil {
-			return fmt.Errorf("invalid webhook URL: %w", err)
-		}
-
-		swh := SetWebhook{
-			URL:                whURL,
-			Certificate:        ws.Certificate,
-			IPAddress:          ws.IPAddress,
-			MaxConnections:     ws.MaxConnections,
-			AllowedUpdates:     ws.AllowedUpdates,
-			DropPendingUpdates: ws.DropPendingUpdates,
-			SecretToken:        ws.SecretToken,
-		}
-
-		r, err = b.Sender.Send(&swh)
-		if err != nil {
+	if _, ok := b.Supplier.(*WebhookSupplier); ok && wh.URL == "" {
+		if err = b.setWebhook(); err != nil {
 			return fmt.Errorf("setting webhook: %w", err)
-		}
-
-		var whOk bool
-		if err = r.BindResult(&whOk); err != nil {
-			return fmt.Errorf("reading API response: %w", err)
-		}
-
-		if !whOk {
-			err = r.GetError()
-			return fmt.Errorf("failed to set webhook: %w", err)
 		}
 	}
 
@@ -139,6 +127,7 @@ func (b *Bot) Serve() error {
 }
 
 // TODO: make it more graceful
+
 func (b *Bot) Shutdown() error {
 	b.cancel()
 	close(b.chUpdate)
@@ -181,6 +170,9 @@ func (b *Bot) init() {
 	if b.updateHandlers == nil {
 		b.updateHandlers = make(map[string]HandlerFunc)
 	}
+	if b.commandHandlers == nil {
+		b.commandHandlers = make(map[string]HandlerFunc)
+	}
 
 	if b.bufSize < 0 {
 		b.bufSize = 0
@@ -197,6 +189,60 @@ func (b *Bot) init() {
 	b.chUpdate = make(chan Update, b.bufSize)
 }
 
+func (b *Bot) getWebhookInfo() (*WebhookInfo, error) {
+	r, err := b.Sender.Send(GetWebhookInfo)
+	if err != nil {
+		return nil, fmt.Errorf("requesting for webhook info: %w", err)
+	}
+
+	var wh WebhookInfo
+	err = r.BindResult(&wh)
+	if err != nil {
+		return nil, fmt.Errorf("reading API response: %w", err)
+	}
+
+	return &wh, nil
+}
+
+func (b *Bot) setWebhook() error {
+	ws := b.Supplier.(*WebhookSupplier)
+	var r *APIResponse
+
+	whURL := ws.WebhookURL()
+
+	_, err := url.Parse(whURL)
+	if err != nil {
+		return fmt.Errorf("invalid webhook URL: %w", err)
+	}
+
+	swh := SetWebhook{
+		URL:                whURL,
+		Certificate:        ws.Certificate,
+		IPAddress:          ws.IPAddress,
+		MaxConnections:     ws.MaxConnections,
+		AllowedUpdates:     ws.AllowedUpdates,
+		DropPendingUpdates: ws.DropPendingUpdates,
+		SecretToken:        ws.SecretToken,
+	}
+
+	r, err = b.Sender.Send(&swh)
+	if err != nil {
+		return fmt.Errorf("sending request: %w", err)
+	}
+
+	var whOk bool
+	if err = r.BindResult(&whOk); err != nil {
+		return fmt.Errorf("reading API response: %w", err)
+	}
+
+	if !whOk {
+		err = r.GetError()
+		return fmt.Errorf("failed to set webhook: %w", err)
+	}
+
+	return nil
+}
+
 func (b *Bot) work() {
 	for {
 		select {
@@ -208,6 +254,7 @@ func (b *Bot) work() {
 				bot:     b,
 				updType: upd.UpdateType(),
 				upd:     &upd,
+				ctx:     b.ctx,
 			}
 
 			if upd.Message != nil && upd.Message.IsCommand() {
