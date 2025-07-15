@@ -23,7 +23,7 @@ func DefaultBot(token string) *Bot {
 		},
 
 		updateHandlers:  make(map[string]HandlerFunc),
-		commandHandlers: make(map[string]map[string]HandlerFunc),
+		commandHandlers: new(CommandRegistry),
 
 		bufSize:    0,
 		workerPool: runtime.NumCPU(),
@@ -40,7 +40,7 @@ type Bot struct {
 
 	// only through methods
 	updateHandlers  map[string]HandlerFunc
-	commandHandlers map[string]map[string]HandlerFunc
+	commandHandlers *CommandRegistry
 	bufSize         int
 	workerPool      int
 
@@ -48,6 +48,8 @@ type Bot struct {
 	chUpdate chan Update
 	ctx      context.Context
 	cancel   context.CancelFunc
+
+	initErr error
 }
 
 func (b *Bot) Handle(t string, handler HandlerFunc) *Bot {
@@ -62,23 +64,124 @@ func (b *Bot) Handle(t string, handler HandlerFunc) *Bot {
 	return b
 }
 
+type Command struct {
+	Name        string
+	Description string
+	Handler     HandlerFunc
+}
+
+type ScopeKey struct {
+	Scope  string
+	ChatID string
+	UserID int
+}
+
+type CommandRegistry struct {
+	byScope map[ScopeKey]map[string]Command
+
+	byCommand map[string]struct {
+		Handler HandlerFunc
+		Scopes  map[ScopeKey]struct{}
+	}
+}
+
+func (r *CommandRegistry) GetCommands(scope ScopeKey) []Command {
+	if r.byScope == nil {
+		return nil
+	}
+
+	var cmds []Command
+	for _, cmd := range r.byScope[scope] {
+		cmds = append(cmds, cmd)
+	}
+
+	return cmds
+}
+
+func (r *CommandRegistry) GetScopes() []ScopeKey {
+	if r.byScope == nil {
+		return nil
+	}
+
+	scopes := make([]ScopeKey, 0, len(r.byScope))
+
+	for scope, val := range r.byScope {
+		if len(val) != 0 && val != nil {
+			scopes = append(scopes, scope)
+		}
+	}
+
+	return scopes
+}
+
+func (r *CommandRegistry) GetHandler(name string) (HandlerFunc, bool) {
+	if r.byCommand == nil {
+		return nil, false
+	}
+
+	cmd, ok := r.byCommand[name]
+	if !ok {
+		return nil, false
+	}
+
+	return cmd.Handler, true
+}
+
+func (r *CommandRegistry) AddCommand(cmd, desc string, handler HandlerFunc, scopes ...ScopeKey) {
+	if len(scopes) == 0 {
+		scopes = []ScopeKey{{Scope: "default"}}
+	}
+
+	if r.byCommand == nil {
+		r.byCommand = make(map[string]struct {
+			Handler HandlerFunc
+			Scopes  map[ScopeKey]struct{}
+		})
+	}
+
+	if _, ok := r.byCommand[cmd]; !ok {
+		r.byCommand[cmd] = struct {
+			Handler HandlerFunc
+			Scopes  map[ScopeKey]struct{}
+		}{
+			Handler: handler,
+			Scopes:  map[ScopeKey]struct{}{},
+		}
+	}
+
+	for _, scope := range scopes {
+		if r.byScope == nil {
+			r.byScope = make(map[ScopeKey]map[string]Command)
+		}
+		if r.byScope[scope] == nil {
+			r.byScope[scope] = make(map[string]Command)
+		}
+
+		r.byScope[scope][cmd] = Command{Name: cmd, Description: desc, Handler: handler}
+		r.byCommand[cmd].Scopes[scope] = struct{}{}
+	}
+}
+
 // Usage:
 //
-//	HandleCommand("/foo", fooHandler) // create a bot command for default scope and handle it with a fooHandler
-//	HandleCommand("/foo", fooHandler, "all_private_chats") // create a bot command for only private chats and handle it with a fooHandler
-func (b *Bot) HandleCommand(cmd string, handler HandlerFunc, params ...any) *Bot {
+//	HandleCommand("/foo", "foo description", fooHandler) // create a bot command for default scope and handle it with a fooHandler
+//	HandleCommand("/foo", "foo desciption", fooHandler, "all_private_chats") // create a bot command for only private chats and handle it with a fooHandler
+func (b *Bot) HandleCommand(cmd, desc string, handler HandlerFunc, params ...any) *Bot {
+	if cmd == "" {
+		b.initErr = fmt.Errorf("cmd must be non-empty")
+	}
+
 	if b.commandHandlers == nil {
-		b.commandHandlers = make(map[string]map[string]HandlerFunc)
+		b.commandHandlers = new(CommandRegistry)
 	}
 
 	if !strings.HasPrefix(cmd, "/") {
 		cmd = "/" + cmd
 	}
 
-	if b.commandHandlers["default"] == nil {
-		b.commandHandlers["default"] = make(map[string]HandlerFunc)
+	if len(params) == 0 {
+		b.commandHandlers.AddCommand(cmd, desc, handler)
 	}
-	b.commandHandlers["default"][cmd] = handler
 
 	return b
 }
@@ -102,26 +205,36 @@ func (b *Bot) WithWorkerPool(l int) *Bot {
 // TODO: simplify it
 
 func (b *Bot) Serve() error {
+	if b.initErr != nil {
+		return fmt.Errorf("configuration error: %w", b.initErr)
+	}
+
+	// creating context, channels, settting defaults, etc etc...
 	b.init()
 
+	// checking if we can launch the bot
 	wh, err := b.getWebhookInfo()
 	if err != nil {
 		// FIXME: there is a better way to handle this
 		return fmt.Errorf("getting webhook info: %w", err)
 	}
-
 	if _, ok := b.Supplier.(*LongPollingSupplier); ok && wh.URL != "" {
 		return fmt.Errorf("can't use long polling when webhook is set; use deleteWebhook before running long polling bot")
 	}
-
 	if _, ok := b.Supplier.(*WebhookSupplier); ok && wh.URL == "" {
 		if err = b.setWebhook(); err != nil {
 			return fmt.Errorf("setting webhook: %w", err)
 		}
 	}
 
+	// filtering updates that we're not handling
 	for upd := range b.updateHandlers {
 		b.Supplier.AllowUpdate(upd)
+	}
+
+	// adding the list of handled commands to the bot menu on the client side
+	if err = b.setupCommands(); err != nil {
+		return fmt.Errorf("setting up commands: %w", err)
 	}
 
 	defer b.Shutdown()
@@ -178,7 +291,7 @@ func (b *Bot) init() {
 		b.updateHandlers = make(map[string]HandlerFunc)
 	}
 	if b.commandHandlers == nil {
-		b.commandHandlers = make(map[string]map[string]HandlerFunc)
+		b.commandHandlers = new(CommandRegistry)
 	}
 
 	if b.bufSize < 0 {
@@ -250,6 +363,52 @@ func (b *Bot) setWebhook() error {
 	return nil
 }
 
+func (b *Bot) setupCommands() error {
+	scopes := b.commandHandlers.GetScopes()
+
+	if scopes == nil {
+		return nil // early exit, nothing to do
+	}
+
+	for _, scope := range scopes {
+		cmds := b.commandHandlers.GetCommands(scope)
+		if cmds == nil {
+			continue // it can't be an error, can it?
+		}
+
+		bc := make([]BotCommand, 0, len(cmds))
+		for _, cmd := range cmds {
+			bc = append(bc, BotCommand{
+				Command:     cmd.Name,
+				Description: cmd.Description,
+			})
+		}
+
+		smc := SetMyCommands{
+			Commands: bc,
+		}
+
+		switch scope.Scope {
+		case "default":
+			smc.Scope = BotCommandScopeDefault
+
+		default:
+			return fmt.Errorf("unknown bot command scope: %s", scope.Scope)
+		}
+
+		resp, err := b.Sender.Send(&smc)
+		if err != nil {
+			return fmt.Errorf("sending setMyCommands request: %w", err)
+		}
+
+		if err := resp.GetError(); err != nil {
+			return fmt.Errorf("failed to set commands: %w", err)
+		}
+	}
+
+	return nil
+}
+
 func (b *Bot) work() {
 	for {
 		select {
@@ -267,11 +426,9 @@ func (b *Bot) work() {
 			if upd.Message != nil && upd.Message.IsCommand() {
 				cmd, _ := upd.Message.GetCommand()
 
-				for _, inner := range b.commandHandlers {
-					if cmdHandler, ok := inner[cmd]; ok {
-						cmdHandler(ctx)
-						return
-					}
+				handler, ok := b.commandHandlers.GetHandler(cmd)
+				if ok {
+					handler(ctx)
 				}
 
 				return

@@ -300,3 +300,32 @@ func (m *SendPhoto) Payload() (io.Reader, error) {
 
 	return buf, nil
 }
+
+type SetMyCommands struct {
+	Commands     []BotCommand    `json:"commands"`
+	Scope        BotCommandScope `json:"scope,omitempty"`
+	LanguageCode string          `json:"language_code,omitempty"`
+}
+
+func (m *SetMyCommands) Method() string {
+	return "setMyCommands"
+}
+
+func (m *SetMyCommands) ContentType() string {
+	return "application/json"
+}
+
+func (m *SetMyCommands) Payload() (io.Reader, error) {
+	buf := bytes.NewBuffer(make([]byte, 0, 4*1024))
+
+	enc := json.NewEncoder(buf)
+	enc.SetIndent("", "  ")
+	enc.SetEscapeHTML(false)
+
+	err := enc.Encode(m)
+	if err != nil {
+		return nil, fmt.Errorf("encoding request payload: %w", err)
+	}
+
+	return buf, nil
+}

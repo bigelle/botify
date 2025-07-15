@@ -370,6 +370,25 @@ type MessageEntity struct {
 	CustomEmojiID string `json:"custom_emoji_id,omitzero"`
 }
 
+type BotCommand struct {
+	Command     string `json:"command"`
+	Description string `json:"description"`
+}
+
 type BotCommandScope interface {
 	Scope() string
 }
+
+type BotCommandScopeNoParams string
+
+func (b BotCommandScopeNoParams) Scope() string {
+	return string(b)
+}
+
+func (b BotCommandScopeNoParams) MarshalJSON() ([]byte, error) {
+	return []byte(`{"type": "` + string(b) + `"}`), nil
+}
+
+const (
+	BotCommandScopeDefault BotCommandScopeNoParams = "default"
+)
