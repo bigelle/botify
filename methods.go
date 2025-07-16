@@ -100,7 +100,6 @@ func (m *SetWebhook) Payload() (io.Reader, error) {
 
 		enc := json.NewEncoder(buf)
 		enc.SetEscapeHTML(false)
-		enc.SetIndent("", "  ")
 
 		if err := enc.Encode(m); err != nil {
 			return nil, fmt.Errorf("encoding setWebhook payload as JSON: %w", err)
@@ -286,12 +285,38 @@ func (m *SendPhoto) Payload() (io.Reader, error) {
 	m.ct = "application/json"
 
 	enc := json.NewEncoder(buf)
-	enc.SetIndent("", "  ")
 	enc.SetEscapeHTML(false)
 
 	err := enc.Encode(m)
 	if err != nil {
-		return nil, fmt.Errorf("encoding request payload: %w", err)
+		return nil, fmt.Errorf("encoding sendPhoto JSON payload: %w", err)
+	}
+
+	return buf, nil
+}
+
+type GetMyCommands struct {
+	Scope        BotCommandScope `json:"scope,omitempty"`
+	LanguageCode string          `json:"language_code,omitempty"`
+}
+
+func (m *GetMyCommands) Method() string {
+	return "getMyCommands"
+}
+
+func (m *GetMyCommands) ContentType() string {
+	return "application/json"
+}
+
+func (m *GetMyCommands) Payload() (io.Reader, error) {
+	buf := bytes.NewBuffer(make([]byte, 0, 4*1024))
+
+	enc := json.NewEncoder(buf)
+	enc.SetEscapeHTML(false)
+
+	err := enc.Encode(m)
+	if err != nil {
+		return nil, fmt.Errorf("encoding getMyCommands JSON payload: %w", err)
 	}
 
 	return buf, nil
@@ -315,12 +340,11 @@ func (m *SetMyCommands) Payload() (io.Reader, error) {
 	buf := bytes.NewBuffer(make([]byte, 0, 4*1024))
 
 	enc := json.NewEncoder(buf)
-	enc.SetIndent("", "  ")
 	enc.SetEscapeHTML(false)
 
 	err := enc.Encode(m)
 	if err != nil {
-		return nil, fmt.Errorf("encoding request payload: %w", err)
+		return nil, fmt.Errorf("encoding setMyCommands JSON payload: %w", err)
 	}
 
 	return buf, nil

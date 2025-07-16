@@ -74,26 +74,39 @@ func (r *commandRegistry) AddCommand(cmd, desc string, handler HandlerFunc, scop
 			Scopes  map[scopeKey]struct{}
 		})
 	}
+	if r.byScope == nil {
+		r.byScope = make(map[scopeKey]map[string]command)
+	}
 
-	if _, ok := r.byCommand[cmd]; !ok {
-		r.byCommand[cmd] = struct {
+	var cmdInfo struct {
+		Handler HandlerFunc
+		Scopes  map[scopeKey]struct{}
+	}
+
+	if existing, ok := r.byCommand[cmd]; ok {
+		cmdInfo = existing
+	} else {
+		cmdInfo = struct {
 			Handler HandlerFunc
 			Scopes  map[scopeKey]struct{}
 		}{
 			Handler: handler,
-			Scopes:  map[scopeKey]struct{}{},
+			Scopes:  make(map[scopeKey]struct{}),
 		}
 	}
 
 	for _, scope := range scopes {
-		if r.byScope == nil {
-			r.byScope = make(map[scopeKey]map[string]command)
-		}
 		if r.byScope[scope] == nil {
 			r.byScope[scope] = make(map[string]command)
 		}
+		r.byScope[scope][cmd] = command{
+			Name:        cmd,
+			Description: desc,
+			Handler:     handler,
+		}
 
-		r.byScope[scope][cmd] = command{Name: cmd, Description: desc, Handler: handler}
-		r.byCommand[cmd].Scopes[scope] = struct{}{}
+		cmdInfo.Scopes[scope] = struct{}{}
 	}
+
+	r.byCommand[cmd] = cmdInfo
 }

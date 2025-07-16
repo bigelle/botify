@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/url"
 	"runtime"
+	"slices"
 	"strings"
 )
 
@@ -282,65 +283,136 @@ func (b *Bot) setWebhook() error {
 	return nil
 }
 
+var scopeMap = map[string]func(scopeKey) BotCommandScope{
+	"default":                   func(scopeKey) BotCommandScope { return BotCommandScopeDefault },
+	"all_private_chats":         func(scopeKey) BotCommandScope { return BotCommandScopeAllPrivateChats },
+	"all_group_chats":           func(scopeKey) BotCommandScope { return BotCommandScopeAllGroupChats },
+	"all_chat_administrators":   func(scopeKey) BotCommandScope { return BotCommandScopeAllChatAdministrators },
+	"chat":                      func(key scopeKey) BotCommandScope { return BotCommandScopeChat(key.ChatID) },
+	"chat_administrators":       func(key scopeKey) BotCommandScope { return BotCommandScopeChatAdministrators(key.ChatID) },
+	"chat_member":               func(key scopeKey) BotCommandScope { 
+		return BotCommandScopeChatMember{ChatID: key.ChatID, UserID: key.UserID} 
+	},
+}
+
 func (b *Bot) setupCommands() error {
+	b.commandHandlers.Debug()
+
 	scopes := b.commandHandlers.GetScopes()
-
-	if scopes == nil {
-		return nil // early exit, nothing to do
+	if len(scopes) == 0 {
+		return nil
 	}
-
-	// FIXME: should rewrite scopes only if getCommands returns
-	// a list of commands that differs from what we have
 
 	for _, scope := range scopes {
-		cmds := b.commandHandlers.GetCommands(scope)
-		if cmds == nil {
-			continue // it can't be an error, can it?
-		}
-
-		bc := make([]BotCommand, 0, len(cmds))
-		for _, cmd := range cmds {
-			bc = append(bc, BotCommand{
-				Command:     cmd.Name,
-				Description: cmd.Description,
-			})
-		}
-
-		smc := SetMyCommands{
-			Commands: bc,
-		}
-
-		switch scope.Scope {
-		case "default":
-			smc.Scope = BotCommandScopeDefault
-		case "all_private_chats":
-			smc.Scope = BotCommandScopeAllPrivateChats
-		case "all_group_chats":
-			smc.Scope = BotCommandScopeAllGroupChats
-		case "all_chat_administrators":
-			smc.Scope = BotCommandScopeAllChatAdministrators
-		case "chat":
-			smc.Scope = BotCommandScopeChat(scope.ChatID)
-		case "chat_administrators":
-			smc.Scope = BotCommandScopeChatAdministrators(scope.ChatID)
-		case "chat_member":
-			smc.Scope = BotCommandScopeChatMember{ChatID: scope.ChatID, UserID: scope.UserID}
-
-		default:
-			return fmt.Errorf("unknown bot command scope: %s", scope.Scope)
-		}
-
-		resp, err := b.Sender.Send(&smc)
-		if err != nil {
-			return fmt.Errorf("sending setMyCommands request: %w", err)
-		}
-
-		if err := resp.GetError(); err != nil {
-			return fmt.Errorf("failed to set commands: %w", err)
+		if err := b.syncCommandsByScope(scope); err != nil {
+			return fmt.Errorf("syncing commands for scope %s: %w", scope.Scope, err)
 		}
 	}
-
 	return nil
+}
+
+func (b *Bot) syncCommandsByScope(key scopeKey) error {
+	scopeFunc, exists := scopeMap[key.Scope]
+	if !exists {
+		return fmt.Errorf("unknown bot command scope: %s", key.Scope)
+	}
+	
+	scope := scopeFunc(key)
+	
+	currentCommands, err := b.getCurrentCommands(scope)
+	if err != nil {
+		return fmt.Errorf("getting current commands: %w", err)
+	}
+	
+	myCommands := b.commandHandlers.GetCommands(key)
+	
+	if !isEqualCommands(myCommands, currentCommands) {
+		if err := b.setCommands(scope, myCommands); err != nil {
+			return fmt.Errorf("setting commands: %w", err)
+		}
+	}
+	
+	return nil
+}
+
+func (b *Bot) getCurrentCommands(scope BotCommandScope) ([]BotCommand, error) {
+	gmc := GetMyCommands{Scope: scope}
+	
+	resp, err := b.Sender.Send(&gmc)
+	if err != nil {
+		return nil, fmt.Errorf("sending getMyCommands request: %w", err)
+	}
+	
+	if err = resp.GetError(); err != nil {
+		return nil, fmt.Errorf("getting current commands: %w", err)
+	}
+	
+	var commands []BotCommand
+	if err = resp.BindResult(&commands); err != nil {
+		return nil, fmt.Errorf("binding getMyCommands result: %w", err)
+	}
+	
+	return commands, nil
+}
+
+func (b *Bot) setCommands(scope BotCommandScope, commands []command) error {
+	botCommands := make([]BotCommand, 0, len(commands))
+	
+	for _, cmd := range commands {
+		botCommands = append(botCommands, BotCommand{
+			Command:     cmd.Name,
+			Description: cmd.Description,
+		})
+	}
+	
+	smc := SetMyCommands{
+		Scope:    scope,
+		Commands: botCommands,
+	}
+	
+	resp, err := b.Sender.Send(&smc)
+	if err != nil {
+		return fmt.Errorf("sending setMyCommands request: %w", err)
+	}
+	
+	if err = resp.GetError(); err != nil {
+		return fmt.Errorf("setting bot commands: %w", err)
+	}
+	
+	return nil
+}
+
+func isEqualCommands(myCommands []command, telegramCommands []BotCommand) bool {
+	if len(myCommands) != len(telegramCommands) {
+		return false
+	}
+	
+	if len(myCommands) == 0 {
+		return true
+	}
+	
+	mySlice := make([]BotCommand, len(myCommands))
+	for i, cmd := range myCommands {
+		mySlice[i] = BotCommand{
+			Command:     cmd.Name,
+			Description: cmd.Description,
+		}
+	}
+	
+	telegramSlice := make([]BotCommand, len(telegramCommands))
+	copy(telegramSlice, telegramCommands)
+	
+	compareFunc := func(a, b BotCommand) int {
+		if cmp := strings.Compare(a.Command, b.Command); cmp != 0 {
+			return cmp
+		}
+		return strings.Compare(a.Description, b.Description)
+	}
+	
+	slices.SortFunc(mySlice, compareFunc)
+	slices.SortFunc(telegramSlice, compareFunc)
+	
+	return slices.Equal(mySlice, telegramSlice)
 }
 
 func (b *Bot) work() {
