@@ -296,8 +296,6 @@ var scopeMap = map[string]func(scopeKey) BotCommandScope{
 }
 
 func (b *Bot) setupCommands() error {
-	b.commandHandlers.Debug()
-
 	scopes := b.commandHandlers.GetScopes()
 	if len(scopes) == 0 {
 		return nil
