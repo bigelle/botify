@@ -26,7 +26,7 @@ func (r *commandRegistry) GetCommands(scope scopeKey) []command {
 		return nil
 	}
 
-	var cmds []command
+	cmds := make([]command, 0, len(r.byScope[scope]))
 	for _, cmd := range r.byScope[scope] {
 		cmds = append(cmds, cmd)
 	}

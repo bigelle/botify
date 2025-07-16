@@ -23,10 +23,13 @@ func allowUpdate(list []string, upds ...string) {
 		list = []string{}
 	}
 
-	list = slices.Grow(list, len(upds))
-
 	for _, upd := range upds {
+		if _, ok := allUpdTypes[upd]; !ok {
+			continue
+		}
+		
 		if !slices.Contains(list, upd) {
+			list = slices.Grow(list, 1)
 			list = append(list, upd)
 		}
 	}
