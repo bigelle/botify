@@ -23,7 +23,7 @@ func DefaultBot(token string) *Bot {
 		},
 
 		updateHandlers:  make(map[string]HandlerFunc),
-		commandHandlers: new(CommandRegistry),
+		commandHandlers: new(commandRegistry),
 
 		bufSize:    0,
 		workerPool: runtime.NumCPU(),
@@ -40,7 +40,7 @@ type Bot struct {
 
 	// only through methods
 	updateHandlers  map[string]HandlerFunc
-	commandHandlers *CommandRegistry
+	commandHandlers *commandRegistry
 	bufSize         int
 	workerPool      int
 
@@ -64,123 +64,42 @@ func (b *Bot) Handle(t string, handler HandlerFunc) *Bot {
 	return b
 }
 
-type Command struct {
-	Name        string
-	Description string
-	Handler     HandlerFunc
-}
-
-type ScopeKey struct {
-	Scope  string
-	ChatID string
-	UserID int
-}
-
-type CommandRegistry struct {
-	byScope map[ScopeKey]map[string]Command
-
-	byCommand map[string]struct {
-		Handler HandlerFunc
-		Scopes  map[ScopeKey]struct{}
-	}
-}
-
-func (r *CommandRegistry) GetCommands(scope ScopeKey) []Command {
-	if r.byScope == nil {
-		return nil
-	}
-
-	var cmds []Command
-	for _, cmd := range r.byScope[scope] {
-		cmds = append(cmds, cmd)
-	}
-
-	return cmds
-}
-
-func (r *CommandRegistry) GetScopes() []ScopeKey {
-	if r.byScope == nil {
-		return nil
-	}
-
-	scopes := make([]ScopeKey, 0, len(r.byScope))
-
-	for scope, val := range r.byScope {
-		if len(val) != 0 && val != nil {
-			scopes = append(scopes, scope)
-		}
-	}
-
-	return scopes
-}
-
-func (r *CommandRegistry) GetHandler(name string) (HandlerFunc, bool) {
-	if r.byCommand == nil {
-		return nil, false
-	}
-
-	cmd, ok := r.byCommand[name]
-	if !ok {
-		return nil, false
-	}
-
-	return cmd.Handler, true
-}
-
-func (r *CommandRegistry) AddCommand(cmd, desc string, handler HandlerFunc, scopes ...ScopeKey) {
-	if len(scopes) == 0 {
-		scopes = []ScopeKey{{Scope: "default"}}
-	}
-
-	if r.byCommand == nil {
-		r.byCommand = make(map[string]struct {
-			Handler HandlerFunc
-			Scopes  map[ScopeKey]struct{}
-		})
-	}
-
-	if _, ok := r.byCommand[cmd]; !ok {
-		r.byCommand[cmd] = struct {
-			Handler HandlerFunc
-			Scopes  map[ScopeKey]struct{}
-		}{
-			Handler: handler,
-			Scopes:  map[ScopeKey]struct{}{},
-		}
-	}
-
-	for _, scope := range scopes {
-		if r.byScope == nil {
-			r.byScope = make(map[ScopeKey]map[string]Command)
-		}
-		if r.byScope[scope] == nil {
-			r.byScope[scope] = make(map[string]Command)
-		}
-
-		r.byScope[scope][cmd] = Command{Name: cmd, Description: desc, Handler: handler}
-		r.byCommand[cmd].Scopes[scope] = struct{}{}
-	}
-}
-
 // Usage:
 //
-//	HandleCommand("/foo", "foo description", fooHandler) // create a bot command for default scope and handle it with a fooHandler
-//	HandleCommand("/foo", "foo desciption", fooHandler, "all_private_chats") // create a bot command for only private chats and handle it with a fooHandler
-func (b *Bot) HandleCommand(cmd, desc string, handler HandlerFunc, params ...any) *Bot {
+//	HandleCommand("/foo", "foo description", fooHandler) // create a bot command for default scope and handle it with fooHandler
+//	HandleCommand("/foo", "foo desciption", fooHandler, BotCommandScopeAllPrivateChats) // create a bot command for only private chats and handle it with fooHandler
+func (b *Bot) HandleCommand(cmd, desc string, handler HandlerFunc, scopes ...BotCommandScope) *Bot {
 	if cmd == "" {
 		b.initErr = fmt.Errorf("cmd must be non-empty")
 	}
 
 	if b.commandHandlers == nil {
-		b.commandHandlers = new(CommandRegistry)
+		b.commandHandlers = new(commandRegistry)
 	}
 
 	if !strings.HasPrefix(cmd, "/") {
 		cmd = "/" + cmd
 	}
 
-	if len(params) == 0 {
+	if len(scopes) == 0 {
 		b.commandHandlers.AddCommand(cmd, desc, handler)
+	} else {
+		keys := make([]scopeKey, 0, len(scopes))
+
+		for _, scope := range scopes {
+			switch s := scope.(type) {
+			case botCommandScopeNoParams:
+				keys = append(keys, scopeKey{Scope: s.Scope()})
+			case BotCommandScopeChat:
+				keys = append(keys, scopeKey{Scope: s.Scope(), ChatID: string(s)})
+			case BotCommandScopeChatAdministrators:
+				keys = append(keys, scopeKey{Scope: s.Scope(), ChatID: string(s)})
+			case BotCommandScopeChatMember:
+				keys = append(keys, scopeKey{Scope: s.Scope(), ChatID: s.ChatID, UserID: s.UserID})
+			}
+		}
+
+		b.commandHandlers.AddCommand(cmd, desc, handler, keys...)
 	}
 
 	return b
@@ -291,7 +210,7 @@ func (b *Bot) init() {
 		b.updateHandlers = make(map[string]HandlerFunc)
 	}
 	if b.commandHandlers == nil {
-		b.commandHandlers = new(CommandRegistry)
+		b.commandHandlers = new(commandRegistry)
 	}
 
 	if b.bufSize < 0 {
@@ -370,6 +289,9 @@ func (b *Bot) setupCommands() error {
 		return nil // early exit, nothing to do
 	}
 
+	// FIXME: should rewrite scopes only if getCommands returns
+	// a list of commands that differs from what we have
+
 	for _, scope := range scopes {
 		cmds := b.commandHandlers.GetCommands(scope)
 		if cmds == nil {
@@ -391,6 +313,18 @@ func (b *Bot) setupCommands() error {
 		switch scope.Scope {
 		case "default":
 			smc.Scope = BotCommandScopeDefault
+		case "all_private_chats":
+			smc.Scope = BotCommandScopeAllPrivateChats
+		case "all_group_chats":
+			smc.Scope = BotCommandScopeAllGroupChats
+		case "all_chat_administrators":
+			smc.Scope = BotCommandScopeAllChatAdministrators
+		case "chat":
+			smc.Scope = BotCommandScopeChat(scope.ChatID)
+		case "chat_administrators":
+			smc.Scope = BotCommandScopeChatAdministrators(scope.ChatID)
+		case "chat_member":
+			smc.Scope = BotCommandScopeChatMember{ChatID: scope.ChatID, UserID: scope.UserID}
 
 		default:
 			return fmt.Errorf("unknown bot command scope: %s", scope.Scope)

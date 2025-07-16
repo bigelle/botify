@@ -14,25 +14,25 @@ type APIMethod interface {
 	Payload() (io.Reader, error)
 }
 
-// MethodWithNoParams is used to send a request that requires no parameters,
+// methodWithNoParams is used to send a request that requires no parameters,
 // meaning there is no request body and it does not require Content-Type header.
-type MethodWithNoParams string
+type methodWithNoParams string
 
-func (m MethodWithNoParams) ContentType() string {
+func (m methodWithNoParams) ContentType() string {
 	return ""
 }
 
-func (m MethodWithNoParams) Method() string {
+func (m methodWithNoParams) Method() string {
 	return string(m)
 }
 
-func (m MethodWithNoParams) Payload() (io.Reader, error) {
+func (m methodWithNoParams) Payload() (io.Reader, error) {
 	return nil, nil
 }
 
 const (
-	GetWebhookInfo MethodWithNoParams = "getWebhookInfo"
-	Close          MethodWithNoParams = "close"
+	GetWebhookInfo methodWithNoParams = "getWebhookInfo"
+	Close          methodWithNoParams = "close"
 )
 
 type GetUpdates struct {
@@ -57,8 +57,6 @@ func (m *GetUpdates) Payload() (io.Reader, error) {
 	if err != nil {
 		return nil, fmt.Errorf("encoding getUpdates payload: %w", err)
 	}
-
-	buf.Truncate(buf.Len())
 
 	return buf, nil
 }
@@ -237,8 +235,6 @@ func (m *SendMessage) Payload() (io.Reader, error) {
 	if err != nil {
 		return nil, fmt.Errorf("encoding sendMessage payload: %w", err)
 	}
-
-	buf.Truncate(buf.Len())
 
 	return buf, nil
 }

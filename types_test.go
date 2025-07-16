@@ -48,7 +48,7 @@ func TestChatBoostSource_Deserialization(t *testing.T) {
 
 func TestMessage_GetCommand(t *testing.T) {
 	testcases := []struct {
-		Name string
+		Name      string
 		Input     Message
 		Output    string
 		ExpectErr bool
@@ -59,13 +59,13 @@ func TestMessage_GetCommand(t *testing.T) {
 				Text: strPointer("/start"),
 				Entities: &[]MessageEntity{
 					{
-						Type: "bot_command",
+						Type:   "bot_command",
 						Offset: 0,
 						Length: 6,
 					},
 				},
 			},
-			Output: "/start",
+			Output:    "/start",
 			ExpectErr: false,
 		},
 	}
@@ -86,5 +86,26 @@ func TestMessage_GetCommand(t *testing.T) {
 }
 
 func strPointer(str string) *string {
-	return  &str
+	return &str
+}
+
+func TestBotCommandScope_MarshalJSON(t *testing.T) {
+	testcases := []BotCommandScope{
+		BotCommandScopeDefault,
+		BotCommandScopeAllPrivateChats,
+		BotCommandScopeAllChatAdministrators,
+		BotCommandScopeChat("@my_chat"),
+		BotCommandScopeChatAdministrators("@my_admin_chat"),
+		BotCommandScopeChatMember{
+			ChatID: "@vip_chat",
+			UserID: 123456,
+		},
+	}
+
+	for _, tc := range testcases {
+		b, err := tc.MarshalJSON()
+
+		assert.NoError(t, err)
+		assert.True(t, json.Valid(b))
+	}
 }

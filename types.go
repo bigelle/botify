@@ -377,18 +377,55 @@ type BotCommand struct {
 
 type BotCommandScope interface {
 	Scope() string
+	json.Marshaler
 }
 
-type BotCommandScopeNoParams string
+type botCommandScopeNoParams string
 
-func (b BotCommandScopeNoParams) Scope() string {
+func (b botCommandScopeNoParams) Scope() string {
 	return string(b)
 }
 
-func (b BotCommandScopeNoParams) MarshalJSON() ([]byte, error) {
-	return []byte(`{"type": "` + string(b) + `"}`), nil
+func (b botCommandScopeNoParams) MarshalJSON() ([]byte, error) {
+	return []byte(`{"type": "` + b.Scope() + `"}`), nil
 }
 
 const (
-	BotCommandScopeDefault BotCommandScopeNoParams = "default"
+	BotCommandScopeDefault               botCommandScopeNoParams = "default"
+	BotCommandScopeAllPrivateChats       botCommandScopeNoParams = "all_private_chats"
+	BotCommandScopeAllGroupChats         botCommandScopeNoParams = "all_group_chats"
+	BotCommandScopeAllChatAdministrators botCommandScopeNoParams = "all_chat_administrators"
 )
+
+type BotCommandScopeChat string
+
+func (b BotCommandScopeChat) Scope() string {
+	return "chat"
+}
+
+func (b BotCommandScopeChat) MarshalJSON() ([]byte, error) {
+	return fmt.Appendf(nil, `{"type": "%s", "chat_id": "%s"}`, b.Scope(), string(b)), nil
+}
+
+type BotCommandScopeChatAdministrators string
+
+func (b BotCommandScopeChatAdministrators) Scope() string {
+	return "chat_administrators"
+}
+
+func (b BotCommandScopeChatAdministrators) MarshalJSON() ([]byte, error) {
+	return fmt.Appendf(nil, `{"type": "%s", "chat_id": "%s"}`, b.Scope(), string(b)), nil
+}
+
+type BotCommandScopeChatMember struct {
+	ChatID string `json:"chat_id"`
+	UserID int    `json:"user_id"`
+}
+
+func (b BotCommandScopeChatMember) Scope() string {
+	return "chat_member"
+}
+
+func (b BotCommandScopeChatMember) MarshalJSON() ([]byte, error) {
+	return fmt.Appendf(nil, `{"type": "%s", "chat_id": "%s", "user_id": %d}`, b.Scope(), b.ChatID, b.UserID), nil
+}
