@@ -399,10 +399,10 @@ func isEqualCommands(myCommands []command, telegramCommands []BotCommand) bool {
 
 func (b *Bot) work() {
 	var (
-		ctx Context
-		cmd string
+		ctx     Context
+		cmd     string
 		handler HandlerFunc
-		ok bool
+		ok      bool
 	)
 
 	for {
@@ -425,13 +425,11 @@ func (b *Bot) work() {
 				if ok {
 					handler(ctx)
 				}
-
-				return
-			}
-
-			handler, ok = b.updateHandlers[ctx.updType]
-			if ok {
-				handler(ctx)
+			} else {
+				handler, ok = b.updateHandlers[ctx.updType]
+				if ok {
+					handler(ctx)
+				}
 			}
 
 		}
