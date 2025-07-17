@@ -14,18 +14,24 @@ import (
 
 type UpdateReceiver interface {
 	ReceiveUpdates(ctx context.Context, allowedUpdates []string, chUpdate chan<- Update) error
+	PairBot(*Bot)
 }
 
 type LongPolling struct {
-	Sender RequestSender
-
 	Offset  int
 	Limit   int
 	Timeout int
+
+	bot *Bot
 }
 
-func (e *LongPolling) ReceiveUpdates(ctx context.Context, allowedUpdates []string, chUpdate chan<- Update) error {
-	if e.Sender == nil {
+func (lp *LongPolling) PairBot(b *Bot) {
+	lp.bot = b
+	b.Receiver = lp
+}
+
+func (lp *LongPolling) ReceiveUpdates(ctx context.Context, allowedUpdates []string, chUpdate chan<- Update) error {
+	if lp.bot.Sender == nil {
 		return fmt.Errorf("long polling bot requires request sender")
 	}
 
@@ -35,13 +41,13 @@ func (e *LongPolling) ReceiveUpdates(ctx context.Context, allowedUpdates []strin
 			return nil
 		default:
 			get := GetUpdates{
-				Offset:         e.Offset,
-				Limit:          e.Limit,
-				Timeout:        e.Timeout,
+				Offset:         lp.Offset,
+				Limit:          lp.Limit,
+				Timeout:        lp.Timeout,
 				AllowedUpdates: &allowedUpdates,
 			}
 
-			resp, err := e.Sender.SendWithContext(ctx, &get)
+			resp, err := lp.bot.Sender.SendWithContext(ctx, &get)
 			if err != nil {
 				return fmt.Errorf("polling for updates: %w", err)
 			}
@@ -60,17 +66,13 @@ func (e *LongPolling) ReceiveUpdates(ctx context.Context, allowedUpdates []strin
 
 			for _, upd := range upds {
 				chUpdate <- upd
-				e.Offset = upd.UpdateID + 1
+				lp.Offset = upd.UpdateID + 1
 			}
 		}
 	}
 }
 
 type Webhook struct {
-	// Used only to send setWebhook.
-	// For consistency, use the same sender that was used in [Bot]
-	Sender RequestSender
-
 	AllowedUpdates *[]string
 
 	// In format https://example.com
@@ -91,24 +93,12 @@ type Webhook struct {
 	DropPendingUpdates bool
 	// Optional.
 	SecretToken string
-}
 
-func (ws *Webhook) WebhookURL() string {
-	port := ""
-	if ws.ExposedPort != "" && ws.ExposedPort != "443" && ws.ExposedPort != ":443" {
-		port = ws.ExposedPort
-		if !strings.HasPrefix(port, ":") {
-			port = ":" + port
-		}
-	}
-	if !strings.HasPrefix(ws.Path, "/") {
-		ws.Path = "/" + ws.Path
-	}
-	return fmt.Sprintf("%s%s%s", ws.Domain, port, ws.Path)
+	bot *Bot
 }
 
 func (ws *Webhook) ReceiveUpdates(ctx context.Context, allowedUpdates []string, chUpdate chan<- Update) error {
-	if ws.Sender == nil {
+	if ws.bot.Sender == nil {
 		return fmt.Errorf("can't set webhook: no request sender")
 	}
 
@@ -163,6 +153,25 @@ func (ws *Webhook) ReceiveUpdates(ctx context.Context, allowedUpdates []string, 
 	}
 }
 
+func (wh *Webhook) PairBot(b *Bot) {
+	wh.bot = b
+	b.Receiver = wh
+}
+
+func (ws *Webhook) WebhookURL() string {
+	port := ""
+	if ws.ExposedPort != "" && ws.ExposedPort != "443" && ws.ExposedPort != ":443" {
+		port = ws.ExposedPort
+		if !strings.HasPrefix(port, ":") {
+			port = ":" + port
+		}
+	}
+	if !strings.HasPrefix(ws.Path, "/") {
+		ws.Path = "/" + ws.Path
+	}
+	return fmt.Sprintf("%s%s%s", ws.Domain, port, ws.Path)
+}
+
 func (ws *Webhook) SetWebhook(ctx context.Context) error {
 	swh := SetWebhook{
 		URL:                ws.WebhookURL(),
@@ -174,7 +183,7 @@ func (ws *Webhook) SetWebhook(ctx context.Context) error {
 		SecretToken:        ws.SecretToken,
 	}
 
-	resp, err := ws.Sender.SendWithContext(ctx, &swh)
+	resp, err := ws.bot.Sender.SendWithContext(ctx, &swh)
 	if err != nil {
 		return fmt.Errorf("sending setWebhook request: %w", err)
 	}

@@ -15,7 +15,6 @@ func DefaultBot(token string) *Bot {
 		Token:  token,
 		Sender: sender,
 		Receiver: &LongPolling{
-			Sender:  sender,
 			Offset:  0,
 			Timeout: 30,
 			Limit:   100,
@@ -226,13 +225,12 @@ func (b *Bot) init() {
 
 	if b.Receiver == nil {
 		b.Receiver = &LongPolling{
-			Sender: b.Sender,
-
 			Timeout: 30,
 			Offset:  0,
 			Limit:   100,
 		}
 	}
+	b.Receiver.PairBot(b)
 
 	if b.updateHandlers == nil {
 		b.updateHandlers = make(map[string]HandlerFunc)
