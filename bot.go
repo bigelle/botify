@@ -173,12 +173,6 @@ func (b *Bot) Serve() error {
 		return fmt.Errorf("can't use long polling when webhook is set; use deleteWebhook before running long polling bot")
 	}
 
-	// filtering updates that we're not handling
-	allowedUpdates := make([]string, 0, len(b.updateHandlers))
-	for upd := range b.updateHandlers {
-		allowedUpdates = append(allowedUpdates, upd)
-	}
-
 	// adding the list of handled commands to the bot menu on the client side
 	if err = b.setupCommands(); err != nil {
 		return fmt.Errorf("setting up commands: %w", err)
@@ -190,7 +184,7 @@ func (b *Bot) Serve() error {
 		go b.work()
 	}
 
-	return b.Receiver.ReceiveUpdates(b.ctx, allowedUpdates, b.chUpdate)
+	return b.Receiver.ReceiveUpdates(b.ctx, b.chUpdate)
 }
 
 // TODO: make it more graceful

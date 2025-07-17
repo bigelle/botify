@@ -14,7 +14,7 @@ import (
 )
 
 type UpdateReceiver interface {
-	ReceiveUpdates(ctx context.Context, allowedUpdates []string, chUpdate chan<- Update) error
+	ReceiveUpdates(ctx context.Context, chUpdate chan<- Update) error
 	PairBot(*Bot)
 }
 
@@ -31,9 +31,14 @@ func (lp *LongPolling) PairBot(b *Bot) {
 	b.Receiver = lp
 }
 
-func (lp *LongPolling) ReceiveUpdates(ctx context.Context, allowedUpdates []string, chUpdate chan<- Update) error {
+func (lp *LongPolling) ReceiveUpdates(ctx context.Context, chUpdate chan<- Update) error {
 	if lp.bot.Sender == nil {
 		return fmt.Errorf("long polling bot requires request sender")
+	}
+
+	allowedUpdates := make([]string, 0, len(lp.bot.updateHandlers))
+	for upd := range lp.bot.updateHandlers {
+		allowedUpdates = append(allowedUpdates, upd)
 	}
 
 	for {
@@ -74,8 +79,6 @@ func (lp *LongPolling) ReceiveUpdates(ctx context.Context, allowedUpdates []stri
 }
 
 type Webhook struct {
-	AllowedUpdates *[]string
-
 	// In format https://example.com
 	Domain string
 	// Webhook Path.
@@ -98,15 +101,17 @@ type Webhook struct {
 	bot *Bot
 }
 
-func (ws *Webhook) ReceiveUpdates(ctx context.Context, allowedUpdates []string, chUpdate chan<- Update) error {
+func (ws *Webhook) ReceiveUpdates(ctx context.Context, chUpdate chan<- Update) error {
 	if ws.bot.Sender == nil {
 		return fmt.Errorf("can't set webhook: no request sender")
 	}
 
-	ws.AllowedUpdates = &allowedUpdates
+	allowedUpdates := make([]string, 0, len(ws.bot.updateHandlers))
+	for upd := range ws.bot.updateHandlers {
+		allowedUpdates = append(allowedUpdates, upd)
+	}
 
 	mux := http.NewServeMux()
-
 	mux.HandleFunc(ws.Path, ws.handlerFunc(chUpdate))
 
 	if ws.ListenAddr == "" {
@@ -121,7 +126,7 @@ func (ws *Webhook) ReceiveUpdates(ctx context.Context, allowedUpdates []string, 
 	serverErr := make(chan error, 1)
 
 	go func() {
-		if err := ws.SetWebhook(ctx); err != nil {
+		if err := ws.SetWebhook(ctx, allowedUpdates); err != nil {
 			serverErr <- fmt.Errorf("setting webhook: %w", err)
 		}
 	}()
@@ -173,13 +178,13 @@ func (ws *Webhook) WebhookURL() string {
 	return fmt.Sprintf("%s%s%s", ws.Domain, port, ws.Path)
 }
 
-func (ws *Webhook) SetWebhook(ctx context.Context) error {
+func (ws *Webhook) SetWebhook(ctx context.Context, allowedUpdates []string) error {
 	swh := SetWebhook{
 		URL:                ws.WebhookURL(),
 		Certificate:        ws.Certificate,
 		IPAddress:          ws.IPAddress,
 		MaxConnections:     ws.MaxConnections,
-		AllowedUpdates:     ws.AllowedUpdates,
+		AllowedUpdates:     &allowedUpdates,
 		DropPendingUpdates: ws.DropPendingUpdates,
 		SecretToken:        ws.SecretToken,
 	}
