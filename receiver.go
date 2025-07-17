@@ -1,7 +1,6 @@
 package botify
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -10,6 +9,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/bigelle/botify/internal/reused"
 )
 
 type UpdateReceiver interface {
@@ -212,15 +213,23 @@ func (ws *Webhook) handlerFunc(chUpdate chan<- Update) http.HandlerFunc {
 			}
 		}
 
-		b, _ := io.ReadAll(r.Body)
+		buf := reused.Buf()
+		defer reused.PutBuf(buf)
 
-		dec := json.NewDecoder(bytes.NewReader(b))
+		_, err := io.Copy(buf, r.Body)
+		if err != nil {
+			w.WriteHeader(http.StatusRequestEntityTooLarge)
+			log.Printf("reading request body: %s", err.Error())
+			return
+		}
+
+		dec := json.NewDecoder(buf)
 		// dec.DisallowUnknownFields() //FIXME:
 
 		var upd Update
 		if err := dec.Decode(&upd); err != nil {
 			w.WriteHeader(http.StatusBadRequest)
-			log.Printf("parsing body: %s", err.Error())
+			log.Printf("parsing request body: %s", err.Error())
 			return
 		}
 
@@ -228,11 +237,4 @@ func (ws *Webhook) handlerFunc(chUpdate chan<- Update) http.HandlerFunc {
 
 		w.WriteHeader(http.StatusOK)
 	}
-}
-
-func (ws *Webhook) HandlePath(path string) {
-	if !strings.HasPrefix(path, "/") {
-		path = "/" + path
-	}
-	ws.Path = path
 }
