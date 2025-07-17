@@ -7,6 +7,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"slices"
 	"strings"
 	"time"
 
@@ -39,6 +40,9 @@ func (lp *LongPolling) ReceiveUpdates(ctx context.Context, chUpdate chan<- Updat
 	allowedUpdates := make([]string, 0, len(lp.bot.updateHandlers))
 	for upd := range lp.bot.updateHandlers {
 		allowedUpdates = append(allowedUpdates, upd)
+	}
+	if len(lp.bot.commandHandlers.byCommand) > 0 && !slices.Contains(allowedUpdates, UpdateTypeMessage) {
+		allowedUpdates = append(allowedUpdates, UpdateTypeMessage)
 	}
 
 	var (
@@ -116,6 +120,9 @@ func (ws *Webhook) ReceiveUpdates(ctx context.Context, chUpdate chan<- Update) (
 	allowedUpdates := make([]string, 0, len(ws.bot.updateHandlers))
 	for upd := range ws.bot.updateHandlers {
 		allowedUpdates = append(allowedUpdates, upd)
+	}
+	if len(ws.bot.commandHandlers.byCommand) > 0 && !slices.Contains(allowedUpdates, UpdateTypeMessage) {
+		allowedUpdates = append(allowedUpdates, UpdateTypeMessage)
 	}
 
 	mux := http.NewServeMux()

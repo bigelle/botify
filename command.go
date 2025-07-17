@@ -14,8 +14,10 @@ type scopeKey struct {
 }
 
 type commandRegistry struct {
+	// map of scope of command name of command
 	byScope map[scopeKey]map[string]command
 
+	// map of command name of struct
 	byCommand map[string]struct {
 		Handler HandlerFunc
 		Scopes  map[scopeKey]struct{}
