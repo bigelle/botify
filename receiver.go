@@ -16,7 +16,7 @@ type UpdateReceiver interface {
 	ReceiveUpdates(context.Context, []string, chan<- Update) error
 }
 
-type LongPollingSupplier struct {
+type LongPolling struct {
 	Sender RequestSender
 
 	Offset  int
@@ -24,7 +24,7 @@ type LongPollingSupplier struct {
 	Timeout int
 }
 
-func (e *LongPollingSupplier) ReceiveUpdates(ctx context.Context, allowedUpdates []string, chUpdate chan<- Update) error {
+func (e *LongPolling) ReceiveUpdates(ctx context.Context, allowedUpdates []string, chUpdate chan<- Update) error {
 	if e.Sender == nil {
 		return fmt.Errorf("long polling bot requires request sender")
 	}
@@ -66,7 +66,7 @@ func (e *LongPollingSupplier) ReceiveUpdates(ctx context.Context, allowedUpdates
 	}
 }
 
-type WebhookSupplier struct {
+type Webhook struct {
 	// Used only to send setWebhook.
 	// For consistency, use the same sender that was used in [Bot]
 	Sender RequestSender
@@ -91,7 +91,7 @@ type WebhookSupplier struct {
 	SecretToken string
 }
 
-func (ws *WebhookSupplier) WebhookURL() string {
+func (ws *Webhook) WebhookURL() string {
 	port := ""
 	if ws.ExposedPort != "" && ws.ExposedPort != "443" && ws.ExposedPort != ":443" {
 		port = ws.ExposedPort
@@ -105,7 +105,7 @@ func (ws *WebhookSupplier) WebhookURL() string {
 	return fmt.Sprintf("%s%s%s", ws.Domain, port, ws.Path)
 }
 
-func (ws *WebhookSupplier) ReceiveUpdates(ctx context.Context, allowedUpdates []string, chUpdate chan<- Update) error {
+func (ws *Webhook) ReceiveUpdates(ctx context.Context, allowedUpdates []string, chUpdate chan<- Update) error {
 	if ws.Sender == nil {
 		return fmt.Errorf("can't set webhook: no request sender")
 	}
@@ -172,7 +172,7 @@ func (ws *WebhookSupplier) ReceiveUpdates(ctx context.Context, allowedUpdates []
 	}
 }
 
-func (ws *WebhookSupplier) handlerFunc(chUpdate chan<- Update) http.HandlerFunc {
+func (ws *Webhook) handlerFunc(chUpdate chan<- Update) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		defer r.Body.Close()
 
@@ -207,7 +207,7 @@ func (ws *WebhookSupplier) handlerFunc(chUpdate chan<- Update) http.HandlerFunc 
 	}
 }
 
-func (ws *WebhookSupplier) HandlePath(path string) {
+func (ws *Webhook) HandlePath(path string) {
 	if !strings.HasPrefix(path, "/") {
 		path = "/" + path
 	}
