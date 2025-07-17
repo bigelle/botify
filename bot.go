@@ -87,6 +87,11 @@ func (b *Bot) HandleCommandWithLocales(cmd string, locales LocaleMap, handler Ha
 		cmd = "/" + cmd
 	}
 
+	var (
+		scope BotCommandScope
+		keys  = make([]scopeKey, 0, len(scopes))
+	)
+
 	for code, desc := range locales {
 		if len(code) != 2 {
 			b.initErr = fmt.Errorf("language code must be a two-letter ISO 639-1: %s", code)
@@ -101,13 +106,12 @@ func (b *Bot) HandleCommandWithLocales(cmd string, locales LocaleMap, handler Ha
 		if len(scopes) == 0 {
 			b.commandHandlers.AddCommand(cmd, desc, handler)
 		} else {
-			keys := make([]scopeKey, 0, len(scopes))
 
 			if code == "en" {
 				code = "" // to make sure that english description is applied by default
 			}
 
-			for _, scope := range scopes {
+			for _, scope = range scopes {
 				switch s := scope.(type) {
 				case botCommandScopeNoParams:
 					keys = append(keys, scopeKey{Scope: s.Scope(), LanguageCode: code})
@@ -121,6 +125,8 @@ func (b *Bot) HandleCommandWithLocales(cmd string, locales LocaleMap, handler Ha
 			}
 
 			b.commandHandlers.AddCommand(cmd, desc, handler, keys...)
+
+			keys = keys[:0]
 		}
 	}
 
@@ -241,9 +247,7 @@ func (b *Bot) init() {
 		b.workerPool = runtime.NumCPU()
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
-	b.ctx = ctx
-	b.cancel = cancel
+	b.ctx, b.cancel = context.WithCancel(context.Background())
 
 	b.chUpdate = make(chan Update, b.bufSize)
 }
@@ -305,7 +309,7 @@ func (b *Bot) syncCommandsByScope(key scopeKey) error {
 	myCommands := b.commandHandlers.GetCommands(key)
 
 	if !isEqualCommands(myCommands, currentCommands) {
-		if err := b.setCommands(scope, myCommands); err != nil {
+		if err = b.setCommands(scope, myCommands); err != nil {
 			return fmt.Errorf("setting commands: %w", err)
 		}
 	}
@@ -394,13 +398,20 @@ func isEqualCommands(myCommands []command, telegramCommands []BotCommand) bool {
 }
 
 func (b *Bot) work() {
+	var (
+		ctx Context
+		cmd string
+		handler HandlerFunc
+		ok bool
+	)
+
 	for {
 		select {
 		case <-b.ctx.Done():
 			return
 
 		case upd := <-b.chUpdate:
-			ctx := Context{
+			ctx = Context{
 				bot:     b,
 				updType: upd.UpdateType(),
 				upd:     &upd,
@@ -408,9 +419,9 @@ func (b *Bot) work() {
 			}
 
 			if upd.Message != nil && upd.Message.IsCommand() {
-				cmd, _ := upd.Message.GetCommand()
+				cmd, _ = upd.Message.GetCommand()
 
-				handler, ok := b.commandHandlers.GetHandler(cmd)
+				handler, ok = b.commandHandlers.GetHandler(cmd)
 				if ok {
 					handler(ctx)
 				}
@@ -418,7 +429,7 @@ func (b *Bot) work() {
 				return
 			}
 
-			handler, ok := b.updateHandlers[ctx.updType]
+			handler, ok = b.updateHandlers[ctx.updType]
 			if ok {
 				handler(ctx)
 			}

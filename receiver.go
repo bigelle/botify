@@ -41,19 +41,27 @@ func (lp *LongPolling) ReceiveUpdates(ctx context.Context, chUpdate chan<- Updat
 		allowedUpdates = append(allowedUpdates, upd)
 	}
 
+	var (
+		get  GetUpdates
+		resp *APIResponse
+		err  error
+		upds []Update
+		upd  Update
+	)
+
 	for {
 		select {
 		case <-ctx.Done():
 			return nil
 		default:
-			get := GetUpdates{
+			get = GetUpdates{
 				Offset:         lp.Offset,
 				Limit:          lp.Limit,
 				Timeout:        lp.Timeout,
 				AllowedUpdates: &allowedUpdates,
 			}
 
-			resp, err := lp.bot.Sender.SendWithContext(ctx, &get)
+			resp, err = lp.bot.Sender.SendWithContext(ctx, &get)
 			if err != nil {
 				return fmt.Errorf("polling for updates: %w", err)
 			}
@@ -61,7 +69,6 @@ func (lp *LongPolling) ReceiveUpdates(ctx context.Context, chUpdate chan<- Updat
 				return resp.GetError()
 			}
 
-			var upds []Update
 			resp.BindResult(&upds)
 
 			// to avoid any rate limits we are sleeping when there's no activity
@@ -70,7 +77,7 @@ func (lp *LongPolling) ReceiveUpdates(ctx context.Context, chUpdate chan<- Updat
 				continue
 			}
 
-			for _, upd := range upds {
+			for _, upd = range upds {
 				chUpdate <- upd
 				lp.Offset = upd.UpdateID + 1
 			}
@@ -101,7 +108,7 @@ type Webhook struct {
 	bot *Bot
 }
 
-func (ws *Webhook) ReceiveUpdates(ctx context.Context, chUpdate chan<- Update) error {
+func (ws *Webhook) ReceiveUpdates(ctx context.Context, chUpdate chan<- Update) (err error) {
 	if ws.bot.Sender == nil {
 		return fmt.Errorf("can't set webhook: no request sender")
 	}
@@ -126,14 +133,14 @@ func (ws *Webhook) ReceiveUpdates(ctx context.Context, chUpdate chan<- Update) e
 	serverErr := make(chan error, 1)
 
 	go func() {
-		if err := ws.SetWebhook(ctx, allowedUpdates); err != nil {
+		if err = ws.SetWebhook(ctx, allowedUpdates); err != nil {
 			serverErr <- fmt.Errorf("setting webhook: %w", err)
 		}
 	}()
 
 	go func() {
 		log.Printf("Listening and serving on %s, exposing %s, webhook is set on %s", ws.ListenAddr, ws.ExposedPort, ws.Path)
-		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		if err = server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			serverErr <- err
 		}
 	}()
@@ -145,7 +152,7 @@ func (ws *Webhook) ReceiveUpdates(ctx context.Context, chUpdate chan<- Update) e
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
 
-		if err := server.Shutdown(shutdownCtx); err != nil {
+		if err = server.Shutdown(shutdownCtx); err != nil {
 			log.Printf("error while stopping server: %v", err)
 			return err
 		}
@@ -153,7 +160,7 @@ func (ws *Webhook) ReceiveUpdates(ctx context.Context, chUpdate chan<- Update) e
 		log.Print("Server is stopped")
 		return ctx.Err()
 
-	case err := <-serverErr:
+	case err = <-serverErr:
 		log.Printf("Server error: %v", err)
 		return err
 	}
@@ -205,6 +212,8 @@ func (ws *Webhook) handlerFunc(chUpdate chan<- Update) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		defer r.Body.Close()
 
+		var err error
+
 		if r.Method != "POST" {
 			w.WriteHeader(http.StatusMethodNotAllowed)
 			return
@@ -221,7 +230,7 @@ func (ws *Webhook) handlerFunc(chUpdate chan<- Update) http.HandlerFunc {
 		buf := reused.Buf()
 		defer reused.PutBuf(buf)
 
-		_, err := io.Copy(buf, r.Body)
+		_, err = io.Copy(buf, r.Body)
 		if err != nil {
 			w.WriteHeader(http.StatusRequestEntityTooLarge)
 			log.Printf("reading request body: %s", err.Error())
@@ -232,7 +241,7 @@ func (ws *Webhook) handlerFunc(chUpdate chan<- Update) http.HandlerFunc {
 		// dec.DisallowUnknownFields() //FIXME:
 
 		var upd Update
-		if err := dec.Decode(&upd); err != nil {
+		if err = dec.Decode(&upd); err != nil {
 			w.WriteHeader(http.StatusBadRequest)
 			log.Printf("parsing request body: %s", err.Error())
 			return
