@@ -65,13 +65,18 @@ func (b *Bot) Handle(t string, handler HandlerFunc) *Bot {
 	return b
 }
 
-// NOTE: if bot has commands in both private chat and default scope, and you're opening the bot menu in a private chat,
-// you would see only private chat commands. 
+// LocaleMap is used to provide a localization for the command.
+// The key must be a two-letter ISO 639-1 language code.
+// The value must be 1-256 characters long.
+type LocaleMap map[string]string
+
+// NOTE: if, for example, bot has commands in both private chat and default scope, and you're opening the bot menu in a private chat,
+// you would see only private chat commands.
 //
 // See [Determining list of commands] for details.
 //
 // [Determining list of commands]: https://core.telegram.org/bots/api#determining-list-of-commands
-func (b *Bot) HandleCommandWithLocales(cmd string, locales map[string]string, handler HandlerFunc, scopes ...BotCommandScope) *Bot {
+func (b *Bot) HandleCommandWithLocales(cmd string, locales LocaleMap, handler HandlerFunc, scopes ...BotCommandScope) *Bot {
 	if cmd == "" {
 		b.initErr = fmt.Errorf("cmd must be non-empty")
 		return b
@@ -125,53 +130,14 @@ func (b *Bot) HandleCommandWithLocales(cmd string, locales map[string]string, ha
 	return b
 }
 
-// NOTE: if bot has commands in both private chat and default scope, and you're opening the bot menu in a private chat,
-// you would see only private chat commands. 
+// NOTE: if , for example, bot has commands in both private chat and default scope, and you're opening the bot menu in a private chat,
+// you would see only private chat commands.
 //
 // See [Determining list of commands] for details.
 //
 // [Determining list of commands]: https://core.telegram.org/bots/api#determining-list-of-commands
 func (b *Bot) HandleCommand(cmd, desc string, handler HandlerFunc, scopes ...BotCommandScope) *Bot {
-	if cmd == "" {
-		b.initErr = fmt.Errorf("cmd must be non-empty")
-		return b
-	}
-
-	if b.commandHandlers == nil {
-		b.commandHandlers = new(commandRegistry)
-	}
-
-	if !strings.HasPrefix(cmd, "/") {
-		cmd = "/" + cmd
-	}
-
-	if len(desc) < 1 || 256 < len(desc) {
-		b.initErr = fmt.Errorf("command description must be 1-256 characters")
-		return b
-	}
-
-	if len(scopes) == 0 {
-		b.commandHandlers.AddCommand(cmd, desc, handler)
-	} else {
-		keys := make([]scopeKey, 0, len(scopes))
-
-		for _, scope := range scopes {
-			switch s := scope.(type) {
-			case botCommandScopeNoParams:
-				keys = append(keys, scopeKey{Scope: s.Scope()})
-			case BotCommandScopeChat:
-				keys = append(keys, scopeKey{Scope: s.Scope(), ChatID: string(s)})
-			case BotCommandScopeChatAdministrators:
-				keys = append(keys, scopeKey{Scope: s.Scope(), ChatID: string(s)})
-			case BotCommandScopeChatMember:
-				keys = append(keys, scopeKey{Scope: s.Scope(), ChatID: s.ChatID, UserID: s.UserID})
-			}
-		}
-
-		b.commandHandlers.AddCommand(cmd, desc, handler, keys...)
-	}
-
-	return b
+	return b.HandleCommandWithLocales(cmd, LocaleMap{"en": desc}, handler, scopes...)
 }
 
 func (b *Bot) WithChannelSize(l int) *Bot {
