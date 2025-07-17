@@ -12,8 +12,8 @@ import (
 	"time"
 )
 
-type UpdateSupplier interface {
-	GetUpdates(context.Context, []string, chan<- Update) error
+type UpdateReceiver interface {
+	ReceiveUpdates(context.Context, []string, chan<- Update) error
 }
 
 type LongPollingSupplier struct {
@@ -24,7 +24,7 @@ type LongPollingSupplier struct {
 	Timeout int
 }
 
-func (e *LongPollingSupplier) GetUpdates(ctx context.Context, allowedUpdates []string, chUpdate chan<- Update) error {
+func (e *LongPollingSupplier) ReceiveUpdates(ctx context.Context, allowedUpdates []string, chUpdate chan<- Update) error {
 	if e.Sender == nil {
 		return fmt.Errorf("long polling bot requires request sender")
 	}
@@ -105,7 +105,7 @@ func (ws *WebhookSupplier) WebhookURL() string {
 	return fmt.Sprintf("%s%s%s", ws.Domain, port, ws.Path)
 }
 
-func (ws *WebhookSupplier) GetUpdates(ctx context.Context, allowedUpdates []string, chUpdate chan<- Update) error {
+func (ws *WebhookSupplier) ReceiveUpdates(ctx context.Context, allowedUpdates []string, chUpdate chan<- Update) error {
 	if ws.Sender == nil {
 		return fmt.Errorf("can't set webhook: no request sender")
 	}

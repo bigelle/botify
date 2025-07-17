@@ -14,7 +14,7 @@ func DefaultBot(token string) *Bot {
 	bot := Bot{
 		Token:  token,
 		Sender: sender,
-		Supplier: &LongPollingSupplier{
+		Receiver: &LongPollingSupplier{
 			Sender:  sender,
 			Offset:  0,
 			Timeout: 30,
@@ -35,7 +35,7 @@ type Bot struct {
 	// configurable
 	Token    string
 	Sender   RequestSender
-	Supplier UpdateSupplier
+	Receiver UpdateReceiver
 
 	// only through methods
 	updateHandlers  map[string]HandlerFunc
@@ -170,7 +170,7 @@ func (b *Bot) Serve() error {
 		// FIXME: there is a better way to handle this
 		return fmt.Errorf("getting webhook info: %w", err)
 	}
-	if _, ok := b.Supplier.(*LongPollingSupplier); ok && wh.URL != "" {
+	if _, ok := b.Receiver.(*LongPollingSupplier); ok && wh.URL != "" {
 		return fmt.Errorf("can't use long polling when webhook is set; use deleteWebhook before running long polling bot")
 	}
 
@@ -191,7 +191,7 @@ func (b *Bot) Serve() error {
 		go b.work()
 	}
 
-	return b.Supplier.GetUpdates(b.ctx, allowedUpdates, b.chUpdate)
+	return b.Receiver.ReceiveUpdates(b.ctx, allowedUpdates, b.chUpdate)
 }
 
 // TODO: make it more graceful
@@ -224,8 +224,8 @@ func (b *Bot) init() {
 		b.Sender = DefaultRequestSender(b.Token)
 	}
 
-	if b.Supplier == nil {
-		b.Supplier = &LongPollingSupplier{
+	if b.Receiver == nil {
+		b.Receiver = &LongPollingSupplier{
 			Sender: b.Sender,
 
 			Timeout: 30,
