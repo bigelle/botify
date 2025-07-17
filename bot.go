@@ -65,13 +65,16 @@ func (b *Bot) Handle(t string, handler HandlerFunc) *Bot {
 	return b
 }
 
-// Usage:
+// NOTE: if bot has commands in both private chat and default scope, and you're opening the bot menu in a private chat,
+// you would see only private chat commands. 
 //
-//	HandleCommand("/foo", "foo description", fooHandler) // create a bot command for default scope and handle it with fooHandler
-//	HandleCommand("/foo", "foo desciption", fooHandler, BotCommandScopeAllPrivateChats) // create a bot command for only private chats and handle it with fooHandler
-func (b *Bot) HandleCommand(cmd, desc string, handler HandlerFunc, scopes ...BotCommandScope) *Bot {
+// See [Determining list of commands] for details.
+//
+// [Determining list of commands]: https://core.telegram.org/bots/api#determining-list-of-commands
+func (b *Bot) HandleCommandWithLocales(cmd string, locales map[string]string, handler HandlerFunc, scopes ...BotCommandScope) *Bot {
 	if cmd == "" {
 		b.initErr = fmt.Errorf("cmd must be non-empty")
+		return b
 	}
 
 	if b.commandHandlers == nil {
@@ -80,6 +83,71 @@ func (b *Bot) HandleCommand(cmd, desc string, handler HandlerFunc, scopes ...Bot
 
 	if !strings.HasPrefix(cmd, "/") {
 		cmd = "/" + cmd
+	}
+
+	for code, desc := range locales {
+		if len(code) != 2 {
+			b.initErr = fmt.Errorf("language code must be a two-letter ISO 639-1: %s", code)
+			return b
+		}
+
+		if len(desc) < 1 || 256 < len(desc) {
+			b.initErr = fmt.Errorf("command description must be 1-256 characters")
+			return b
+		}
+
+		if len(scopes) == 0 {
+			b.commandHandlers.AddCommand(cmd, desc, handler)
+		} else {
+			keys := make([]scopeKey, 0, len(scopes))
+
+			if code == "en" {
+				code = "" // to make sure that english description is applied by default
+			}
+
+			for _, scope := range scopes {
+				switch s := scope.(type) {
+				case botCommandScopeNoParams:
+					keys = append(keys, scopeKey{Scope: s.Scope(), LanguageCode: code})
+				case BotCommandScopeChat:
+					keys = append(keys, scopeKey{Scope: s.Scope(), LanguageCode: code, ChatID: string(s)})
+				case BotCommandScopeChatAdministrators:
+					keys = append(keys, scopeKey{Scope: s.Scope(), LanguageCode: code, ChatID: string(s)})
+				case BotCommandScopeChatMember:
+					keys = append(keys, scopeKey{Scope: s.Scope(), LanguageCode: code, ChatID: s.ChatID, UserID: s.UserID})
+				}
+			}
+
+			b.commandHandlers.AddCommand(cmd, desc, handler, keys...)
+		}
+	}
+
+	return b
+}
+
+// NOTE: if bot has commands in both private chat and default scope, and you're opening the bot menu in a private chat,
+// you would see only private chat commands. 
+//
+// See [Determining list of commands] for details.
+//
+// [Determining list of commands]: https://core.telegram.org/bots/api#determining-list-of-commands
+func (b *Bot) HandleCommand(cmd, desc string, handler HandlerFunc, scopes ...BotCommandScope) *Bot {
+	if cmd == "" {
+		b.initErr = fmt.Errorf("cmd must be non-empty")
+		return b
+	}
+
+	if b.commandHandlers == nil {
+		b.commandHandlers = new(commandRegistry)
+	}
+
+	if !strings.HasPrefix(cmd, "/") {
+		cmd = "/" + cmd
+	}
+
+	if len(desc) < 1 || 256 < len(desc) {
+		b.initErr = fmt.Errorf("command description must be 1-256 characters")
+		return b
 	}
 
 	if len(scopes) == 0 {
@@ -284,14 +352,14 @@ func (b *Bot) setWebhook() error {
 }
 
 var scopeMap = map[string]func(scopeKey) BotCommandScope{
-	"default":                   func(scopeKey) BotCommandScope { return BotCommandScopeDefault },
-	"all_private_chats":         func(scopeKey) BotCommandScope { return BotCommandScopeAllPrivateChats },
-	"all_group_chats":           func(scopeKey) BotCommandScope { return BotCommandScopeAllGroupChats },
-	"all_chat_administrators":   func(scopeKey) BotCommandScope { return BotCommandScopeAllChatAdministrators },
-	"chat":                      func(key scopeKey) BotCommandScope { return BotCommandScopeChat(key.ChatID) },
-	"chat_administrators":       func(key scopeKey) BotCommandScope { return BotCommandScopeChatAdministrators(key.ChatID) },
-	"chat_member":               func(key scopeKey) BotCommandScope { 
-		return BotCommandScopeChatMember{ChatID: key.ChatID, UserID: key.UserID} 
+	"default":                 func(scopeKey) BotCommandScope { return BotCommandScopeDefault },
+	"all_private_chats":       func(scopeKey) BotCommandScope { return BotCommandScopeAllPrivateChats },
+	"all_group_chats":         func(scopeKey) BotCommandScope { return BotCommandScopeAllGroupChats },
+	"all_chat_administrators": func(scopeKey) BotCommandScope { return BotCommandScopeAllChatAdministrators },
+	"chat":                    func(key scopeKey) BotCommandScope { return BotCommandScopeChat(key.ChatID) },
+	"chat_administrators":     func(key scopeKey) BotCommandScope { return BotCommandScopeChatAdministrators(key.ChatID) },
+	"chat_member": func(key scopeKey) BotCommandScope {
+		return BotCommandScopeChatMember{ChatID: key.ChatID, UserID: key.UserID}
 	},
 }
 
@@ -314,69 +382,69 @@ func (b *Bot) syncCommandsByScope(key scopeKey) error {
 	if !exists {
 		return fmt.Errorf("unknown bot command scope: %s", key.Scope)
 	}
-	
+
 	scope := scopeFunc(key)
-	
+
 	currentCommands, err := b.getCurrentCommands(scope)
 	if err != nil {
 		return fmt.Errorf("getting current commands: %w", err)
 	}
-	
+
 	myCommands := b.commandHandlers.GetCommands(key)
-	
+
 	if !isEqualCommands(myCommands, currentCommands) {
 		if err := b.setCommands(scope, myCommands); err != nil {
 			return fmt.Errorf("setting commands: %w", err)
 		}
 	}
-	
+
 	return nil
 }
 
 func (b *Bot) getCurrentCommands(scope BotCommandScope) ([]BotCommand, error) {
 	gmc := GetMyCommands{Scope: scope}
-	
+
 	resp, err := b.Sender.Send(&gmc)
 	if err != nil {
 		return nil, fmt.Errorf("sending getMyCommands request: %w", err)
 	}
-	
+
 	if err = resp.GetError(); err != nil {
 		return nil, fmt.Errorf("getting current commands: %w", err)
 	}
-	
+
 	var commands []BotCommand
 	if err = resp.BindResult(&commands); err != nil {
 		return nil, fmt.Errorf("binding getMyCommands result: %w", err)
 	}
-	
+
 	return commands, nil
 }
 
 func (b *Bot) setCommands(scope BotCommandScope, commands []command) error {
 	botCommands := make([]BotCommand, 0, len(commands))
-	
+
 	for _, cmd := range commands {
 		botCommands = append(botCommands, BotCommand{
 			Command:     cmd.Name,
 			Description: cmd.Description,
 		})
 	}
-	
+
 	smc := SetMyCommands{
 		Scope:    scope,
 		Commands: botCommands,
 	}
-	
+
 	resp, err := b.Sender.Send(&smc)
 	if err != nil {
 		return fmt.Errorf("sending setMyCommands request: %w", err)
 	}
-	
+
 	if err = resp.GetError(); err != nil {
 		return fmt.Errorf("setting bot commands: %w", err)
 	}
-	
+
 	return nil
 }
 
@@ -384,11 +452,11 @@ func isEqualCommands(myCommands []command, telegramCommands []BotCommand) bool {
 	if len(myCommands) != len(telegramCommands) {
 		return false
 	}
-	
+
 	if len(myCommands) == 0 {
 		return true
 	}
-	
+
 	mySlice := make([]BotCommand, len(myCommands))
 	for i, cmd := range myCommands {
 		mySlice[i] = BotCommand{
@@ -396,20 +464,20 @@ func isEqualCommands(myCommands []command, telegramCommands []BotCommand) bool {
 			Description: cmd.Description,
 		}
 	}
-	
+
 	telegramSlice := make([]BotCommand, len(telegramCommands))
 	copy(telegramSlice, telegramCommands)
-	
+
 	compareFunc := func(a, b BotCommand) int {
 		if cmp := strings.Compare(a.Command, b.Command); cmp != 0 {
 			return cmp
 		}
 		return strings.Compare(a.Description, b.Description)
 	}
-	
+
 	slices.SortFunc(mySlice, compareFunc)
 	slices.SortFunc(telegramSlice, compareFunc)
-	
+
 	return slices.Equal(mySlice, telegramSlice)
 }
 

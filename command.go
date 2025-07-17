@@ -7,9 +7,10 @@ type command struct {
 }
 
 type scopeKey struct {
-	Scope  string
-	ChatID string
-	UserID int
+	Scope        string
+	LanguageCode string
+	ChatID       string
+	UserID       int
 }
 
 type commandRegistry struct {
