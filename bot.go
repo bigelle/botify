@@ -3,7 +3,6 @@ package botify
 import (
 	"context"
 	"fmt"
-	"net/url"
 	"runtime"
 	"slices"
 	"strings"
@@ -16,11 +15,10 @@ func DefaultBot(token string) *Bot {
 		Token:  token,
 		Sender: sender,
 		Supplier: &LongPollingSupplier{
-			Sender:         sender,
-			Offset:         0,
-			Timeout:        30,
-			Limit:          100,
-			AllowedUpdates: &[]string{},
+			Sender:  sender,
+			Offset:  0,
+			Timeout: 30,
+			Limit:   100,
 		},
 
 		updateHandlers:  make(map[string]HandlerFunc),
@@ -175,15 +173,11 @@ func (b *Bot) Serve() error {
 	if _, ok := b.Supplier.(*LongPollingSupplier); ok && wh.URL != "" {
 		return fmt.Errorf("can't use long polling when webhook is set; use deleteWebhook before running long polling bot")
 	}
-	if _, ok := b.Supplier.(*WebhookSupplier); ok && wh.URL == "" {
-		if err = b.setWebhook(); err != nil {
-			return fmt.Errorf("setting webhook: %w", err)
-		}
-	}
 
 	// filtering updates that we're not handling
+	allowedUpdates := make([]string, 0, len(b.updateHandlers))
 	for upd := range b.updateHandlers {
-		b.Supplier.AllowUpdate(upd)
+		allowedUpdates = append(allowedUpdates, upd)
 	}
 
 	// adding the list of handled commands to the bot menu on the client side
@@ -197,7 +191,7 @@ func (b *Bot) Serve() error {
 		go b.work()
 	}
 
-	return b.Supplier.GetUpdates(b.ctx, b.chUpdate)
+	return b.Supplier.GetUpdates(b.ctx, allowedUpdates, b.chUpdate)
 }
 
 // TODO: make it more graceful
@@ -234,10 +228,9 @@ func (b *Bot) init() {
 		b.Supplier = &LongPollingSupplier{
 			Sender: b.Sender,
 
-			AllowedUpdates: &[]string{},
-			Timeout:        30,
-			Offset:         0,
-			Limit:          100,
+			Timeout: 30,
+			Offset:  0,
+			Limit:   100,
 		}
 	}
 
@@ -276,45 +269,6 @@ func (b *Bot) getWebhookInfo() (*WebhookInfo, error) {
 	}
 
 	return &wh, nil
-}
-
-func (b *Bot) setWebhook() error {
-	ws := b.Supplier.(*WebhookSupplier)
-	var r *APIResponse
-
-	whURL := ws.WebhookURL()
-
-	_, err := url.Parse(whURL)
-	if err != nil {
-		return fmt.Errorf("invalid webhook URL: %w", err)
-	}
-
-	swh := SetWebhook{
-		URL:                whURL,
-		Certificate:        ws.Certificate,
-		IPAddress:          ws.IPAddress,
-		MaxConnections:     ws.MaxConnections,
-		AllowedUpdates:     ws.AllowedUpdates,
-		DropPendingUpdates: ws.DropPendingUpdates,
-		SecretToken:        ws.SecretToken,
-	}
-
-	r, err = b.Sender.Send(&swh)
-	if err != nil {
-		return fmt.Errorf("sending request: %w", err)
-	}
-
-	var whOk bool
-	if err = r.BindResult(&whOk); err != nil {
-		return fmt.Errorf("reading API response: %w", err)
-	}
-
-	if !whOk {
-		err = r.GetError()
-		return fmt.Errorf("failed to set webhook: %w", err)
-	}
-
-	return nil
 }
 
 var scopeMap = map[string]func(scopeKey) BotCommandScope{

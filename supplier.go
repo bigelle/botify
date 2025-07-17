@@ -8,47 +8,23 @@ import (
 	"io"
 	"log"
 	"net/http"
-	"slices"
 	"strings"
 	"time"
 )
 
 type UpdateSupplier interface {
-	GetUpdates(context.Context, chan<- Update) error
-	AllowUpdate(upds ...string) // maybe it should'nt be a part of the interface?
-}
-
-func allowUpdate(list []string, upds ...string) {
-	if list == nil {
-		list = []string{}
-	}
-
-	for _, upd := range upds {
-		if _, ok := allUpdTypes[upd]; !ok {
-			continue
-		}
-		
-		if !slices.Contains(list, upd) {
-			list = slices.Grow(list, 1)
-			list = append(list, upd)
-		}
-	}
+	GetUpdates(context.Context, []string, chan<- Update) error
 }
 
 type LongPollingSupplier struct {
 	Sender RequestSender
 
-	Offset         int
-	Limit          int
-	Timeout        int
-	AllowedUpdates *[]string
+	Offset  int
+	Limit   int
+	Timeout int
 }
 
-func (lps *LongPollingSupplier) AllowUpdate(upd ...string) {
-	allowUpdate(*lps.AllowedUpdates, upd...)
-}
-
-func (e *LongPollingSupplier) GetUpdates(ctx context.Context, chUpdate chan<- Update) error {
+func (e *LongPollingSupplier) GetUpdates(ctx context.Context, allowedUpdates []string, chUpdate chan<- Update) error {
 	if e.Sender == nil {
 		return fmt.Errorf("long polling bot requires request sender")
 	}
@@ -62,7 +38,7 @@ func (e *LongPollingSupplier) GetUpdates(ctx context.Context, chUpdate chan<- Up
 				Offset:         e.Offset,
 				Limit:          e.Limit,
 				Timeout:        e.Timeout,
-				AllowedUpdates: e.AllowedUpdates,
+				AllowedUpdates: &allowedUpdates,
 			}
 
 			resp, err := e.Sender.SendWithContext(ctx, &get)
@@ -91,6 +67,10 @@ func (e *LongPollingSupplier) GetUpdates(ctx context.Context, chUpdate chan<- Up
 }
 
 type WebhookSupplier struct {
+	// Used only to send setWebhook.
+	// For consistency, use the same sender that was used in [Bot]
+	Sender RequestSender
+
 	// In format https://example.com
 	Domain string
 	// Webhook Path.
@@ -106,26 +86,30 @@ type WebhookSupplier struct {
 	// Optional.
 	MaxConnections int
 	// Optional.
-	AllowedUpdates *[]string
-	// Optional.
 	DropPendingUpdates bool
 	// Optional.
 	SecretToken string
 }
 
-func (ws *WebhookSupplier) AllowUpdate(upds ...string) {
-	allowUpdate(*ws.AllowedUpdates, upds...)
-}
-
 func (ws *WebhookSupplier) WebhookURL() string {
 	port := ""
-	if ws.ExposedPort != "" && ws.ExposedPort != "443" {
-		port = ":" + ws.ExposedPort
+	if ws.ExposedPort != "" && ws.ExposedPort != "443" && ws.ExposedPort != ":443" {
+		port = ws.ExposedPort
+		if !strings.HasPrefix(port, ":") {
+			port = ":" + port
+		}
 	}
-	return fmt.Sprintf("https://%s%s/%s", ws.Domain, port, ws.Path)
+	if !strings.HasPrefix(ws.Path, "/") {
+		ws.Path = "/" + ws.Path
+	}
+	return fmt.Sprintf("%s%s%s", ws.Domain, port, ws.Path)
 }
 
-func (ws *WebhookSupplier) GetUpdates(ctx context.Context, chUpdate chan<- Update) error {
+func (ws *WebhookSupplier) GetUpdates(ctx context.Context, allowedUpdates []string, chUpdate chan<- Update) error {
+	if ws.Sender == nil {
+		return fmt.Errorf("can't set webhook: no request sender")
+	}
+
 	mux := http.NewServeMux()
 
 	mux.HandleFunc(ws.Path, ws.handlerFunc(chUpdate))
@@ -141,8 +125,27 @@ func (ws *WebhookSupplier) GetUpdates(ctx context.Context, chUpdate chan<- Updat
 
 	serverErr := make(chan error, 1)
 
+	swh := SetWebhook{
+		URL:                ws.WebhookURL(),
+		Certificate:        ws.Certificate,
+		IPAddress:          ws.IPAddress,
+		MaxConnections:     ws.MaxConnections,
+		AllowedUpdates:     &allowedUpdates,
+		DropPendingUpdates: ws.DropPendingUpdates,
+		SecretToken:        ws.SecretToken,
+	}
+
+	resp, err := ws.Sender.SendWithContext(ctx, &swh)
+	if err != nil {
+		return fmt.Errorf("sending setWebhook request: %w", err)
+	}
+
+	if err = resp.GetError(); err != nil {
+		return fmt.Errorf("setting webhook: %w", err)
+	}
+
 	go func() {
-		log.Printf("Listening and serving on %s", ws.ExposedPort)
+		log.Printf("Listening and serving on %s, exposing %s, webhook is set on %s", ws.ListenAddr, ws.ExposedPort, ws.Path)
 		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			serverErr <- err
 		}
