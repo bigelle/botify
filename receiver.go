@@ -13,7 +13,7 @@ import (
 )
 
 type UpdateReceiver interface {
-	ReceiveUpdates(context.Context, []string, chan<- Update) error
+	ReceiveUpdates(ctx context.Context, allowedUpdates []string, chUpdate chan<- Update) error
 }
 
 type LongPolling struct {
@@ -71,6 +71,8 @@ type Webhook struct {
 	// For consistency, use the same sender that was used in [Bot]
 	Sender RequestSender
 
+	AllowedUpdates *[]string
+
 	// In format https://example.com
 	Domain string
 	// Webhook Path.
@@ -110,6 +112,8 @@ func (ws *Webhook) ReceiveUpdates(ctx context.Context, allowedUpdates []string, 
 		return fmt.Errorf("can't set webhook: no request sender")
 	}
 
+	ws.AllowedUpdates = &allowedUpdates
+
 	mux := http.NewServeMux()
 
 	mux.HandleFunc(ws.Path, ws.handlerFunc(chUpdate))
@@ -125,24 +129,11 @@ func (ws *Webhook) ReceiveUpdates(ctx context.Context, allowedUpdates []string, 
 
 	serverErr := make(chan error, 1)
 
-	swh := SetWebhook{
-		URL:                ws.WebhookURL(),
-		Certificate:        ws.Certificate,
-		IPAddress:          ws.IPAddress,
-		MaxConnections:     ws.MaxConnections,
-		AllowedUpdates:     &allowedUpdates,
-		DropPendingUpdates: ws.DropPendingUpdates,
-		SecretToken:        ws.SecretToken,
-	}
-
-	resp, err := ws.Sender.SendWithContext(ctx, &swh)
-	if err != nil {
-		return fmt.Errorf("sending setWebhook request: %w", err)
-	}
-
-	if err = resp.GetError(); err != nil {
-		return fmt.Errorf("setting webhook: %w", err)
-	}
+	go func() {
+		if err := ws.SetWebhook(ctx); err != nil {
+			serverErr <- fmt.Errorf("setting webhook: %w", err)
+		}
+	}()
 
 	go func() {
 		log.Printf("Listening and serving on %s, exposing %s, webhook is set on %s", ws.ListenAddr, ws.ExposedPort, ws.Path)
@@ -170,6 +161,29 @@ func (ws *Webhook) ReceiveUpdates(ctx context.Context, allowedUpdates []string, 
 		log.Printf("Server error: %v", err)
 		return err
 	}
+}
+
+func (ws *Webhook) SetWebhook(ctx context.Context) error {
+	swh := SetWebhook{
+		URL:                ws.WebhookURL(),
+		Certificate:        ws.Certificate,
+		IPAddress:          ws.IPAddress,
+		MaxConnections:     ws.MaxConnections,
+		AllowedUpdates:     ws.AllowedUpdates,
+		DropPendingUpdates: ws.DropPendingUpdates,
+		SecretToken:        ws.SecretToken,
+	}
+
+	resp, err := ws.Sender.SendWithContext(ctx, &swh)
+	if err != nil {
+		return fmt.Errorf("sending setWebhook request: %w", err)
+	}
+
+	if err = resp.GetError(); err != nil {
+		return fmt.Errorf("setting webhook: %w", err)
+	}
+
+	return nil
 }
 
 func (ws *Webhook) handlerFunc(chUpdate chan<- Update) http.HandlerFunc {
