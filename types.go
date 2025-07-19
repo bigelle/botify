@@ -247,6 +247,10 @@ func (m *Message) IsCommand() bool {
 }
 
 func (m *Message) GetCommand() (string, error) {
+	if m.Entities == nil {
+		return "", fmt.Errorf("not a command")
+	}
+
 	if m.Text == nil {
 		return "", fmt.Errorf("the message text is empty")
 	}

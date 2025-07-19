@@ -159,8 +159,6 @@ func (b *Bot) WithWorkerPool(l int) *Bot {
 	return b
 }
 
-// TODO: simplify it
-
 func (b *Bot) Serve() error {
 	if b.initErr != nil {
 		return fmt.Errorf("configuration error: %w", b.initErr)
@@ -415,6 +413,7 @@ func (b *Bot) work() {
 				bot:     b,
 				updType: upd.UpdateType(),
 				upd:     &upd,
+				sendedRequests: make([]RequestInfo, 0, 1),
 				ctx:     b.ctx,
 			}
 
@@ -423,12 +422,12 @@ func (b *Bot) work() {
 
 				handler, ok = b.commandHandlers.GetHandler(cmd)
 				if ok {
-					handler(ctx)
+					handler(&ctx)
 				}
 			} else {
 				handler, ok = b.updateHandlers[ctx.updType]
 				if ok {
-					handler(ctx)
+					handler(&ctx)
 				}
 			}
 
