@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"slices"
 	"strings"
@@ -146,7 +145,7 @@ func (ws *Webhook) ReceiveUpdates(ctx context.Context, chUpdate chan<- Update) (
 	}()
 
 	go func() {
-		log.Printf("Listening and serving on %s, exposing %s, webhook is set on %s", ws.ListenAddr, ws.ExposedPort, ws.Path)
+		ws.bot.Logger.Info("webhook server is listening and serving on", "address", ws.ListenAddr, "exposed port", ws.ExposedPort, "path", ws.Path)
 		if err = server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			serverErr <- err
 		}
@@ -154,21 +153,21 @@ func (ws *Webhook) ReceiveUpdates(ctx context.Context, chUpdate chan<- Update) (
 
 	select {
 	case <-ctx.Done():
-		log.Printf("Stopping server")
+		ws.bot.Logger.Info("stopping webhook server")
 
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
 
 		if err = server.Shutdown(shutdownCtx); err != nil {
-			log.Printf("error while stopping server: %v", err)
+			ws.bot.Logger.Error(err, "error shutting down webhook server")
 			return err
 		}
 
-		log.Print("Server is stopped")
+		ws.bot.Logger.Info("webhook server is stopped")
 		return ctx.Err()
 
 	case err = <-serverErr:
-		log.Printf("Server error: %v", err)
+		ws.bot.Logger.Error(err, "server error")
 		return err
 	}
 }
@@ -240,7 +239,7 @@ func (ws *Webhook) handlerFunc(chUpdate chan<- Update) http.HandlerFunc {
 		_, err = io.Copy(buf, r.Body)
 		if err != nil {
 			w.WriteHeader(http.StatusRequestEntityTooLarge)
-			log.Printf("reading request body: %s", err.Error())
+			ws.bot.Logger.Error(err, "reading request body")
 			return
 		}
 
@@ -250,7 +249,7 @@ func (ws *Webhook) handlerFunc(chUpdate chan<- Update) http.HandlerFunc {
 		var upd Update
 		if err = dec.Decode(&upd); err != nil {
 			w.WriteHeader(http.StatusBadRequest)
-			log.Printf("parsing request body: %s", err.Error())
+			ws.bot.Logger.Error(err, "parsing request body")
 			return
 		}
 

@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"fmt"
 	"log"
 	"time"
 
@@ -22,6 +23,7 @@ func LoggingMiddleware(next botify.HandlerFunc) botify.HandlerFunc {
 		}
 
 		log.Printf("%s ID=%d %v", ctx.UpdateType(), ctx.UpdateID(), end)
+		ctx.Bot().Logger.Info("handled update", "type", ctx.UpdateType(), "ID", ctx.UpdateID(), "duration", end)
 	}
 }
 
@@ -30,7 +32,7 @@ func RecoveryMiddleware(next botify.HandlerFunc) botify.HandlerFunc {
 	return func(ctx *botify.Context) {
 		defer func() {
 			if r := recover(); r != nil {
-				log.Printf("PANIC in handler for update_type=%s with ID=%d", ctx.UpdateType(), ctx.UpdateID())
+				ctx.Bot().Logger.Error(fmt.Errorf("%+v", r), "PANIC in handler for update", "type", ctx.UpdateType(), "ID", ctx.UpdateID())
 			}
 		}()
 

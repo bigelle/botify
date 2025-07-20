@@ -138,6 +138,11 @@ type RequestInfo struct {
 	Duration    time.Duration
 }
 
+// returns a read-only copy of the currently active bot
+func (c *Context) Bot() Bot {
+	return *c.bot
+}
+
 func (c *Context) Send(obj APIMethod) (*APIResponse, error) {
 	start := time.Now()
 	resp, err := c.bot.Sender.SendWithContext(c.ctx, obj)

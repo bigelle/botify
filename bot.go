@@ -6,6 +6,8 @@ import (
 	"runtime"
 	"slices"
 	"strings"
+
+	"github.com/go-logr/logr"
 )
 
 func DefaultBot(token string) *Bot {
@@ -35,6 +37,7 @@ type Bot struct {
 	Token    string
 	Sender   RequestSender
 	Receiver UpdateReceiver
+	Logger   logr.Logger
 
 	// only through methods
 	updateHandlers  map[string]HandlerFunc
@@ -230,6 +233,11 @@ func (b *Bot) init() {
 	}
 	b.Receiver.PairBot(b)
 
+	if b.Logger.GetSink() == nil {
+		// no logs by default
+		b.Logger = logr.Discard()
+	}
+
 	if b.updateHandlers == nil {
 		b.updateHandlers = make(map[string]HandlerFunc)
 	}
@@ -410,11 +418,11 @@ func (b *Bot) work() {
 
 		case upd := <-b.chUpdate:
 			ctx = Context{
-				bot:     b,
-				updType: upd.UpdateType(),
-				upd:     &upd,
+				bot:            b,
+				updType:        upd.UpdateType(),
+				upd:            &upd,
 				sendedRequests: make([]RequestInfo, 0, 1),
-				ctx:     b.ctx,
+				ctx:            b.ctx,
 			}
 
 			if upd.Message != nil && upd.Message.IsCommand() {
