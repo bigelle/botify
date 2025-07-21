@@ -64,7 +64,11 @@ func (r *APIResponse) BindResult(dest any) error {
 		return ErrNoResult
 	}
 
-	dec := json.NewDecoder(bytes.NewReader(r.Result))
+	buf := reused.Buf()
+	defer reused.PutBuf(buf)
+	buf.Write(r.Result)
+
+	dec := json.NewDecoder(buf)
 	dec.DisallowUnknownFields()
 
 	if err := dec.Decode(dest); err != nil {
