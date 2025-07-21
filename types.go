@@ -248,7 +248,7 @@ func (m *Message) IsCommand() bool {
 
 func (m *Message) GetCommand() (string, error) {
 	if m.Entities == nil {
-		return "", fmt.Errorf("not a command")
+		return "", fmt.Errorf("the message has no entities")
 	}
 
 	if m.Text == nil {
@@ -257,7 +257,11 @@ func (m *Message) GetCommand() (string, error) {
 
 	for _, ent := range *m.Entities {
 		if ent.Type == "bot_command" {
-			return (*m.Text)[ent.Offset : ent.Offset+ent.Length], nil
+			runes := []rune(*m.Text)
+			if ent.Offset+ent.Length > len(runes) {
+				return "", fmt.Errorf("invalid command entity: offset+length out of bounds")
+			}
+			return string(runes[ent.Offset : ent.Offset+ent.Length]), nil
 		}
 	}
 

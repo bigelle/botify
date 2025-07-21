@@ -10,30 +10,6 @@ import (
 	"github.com/go-logr/logr"
 )
 
-func DefaultBot(token string) *Bot {
-	sender := TGBotAPIRequestSender{
-		APIToken: token,
-	}
-
-	bot := Bot{
-		Token:  token,
-		Sender: &sender,
-		Receiver: &LongPolling{
-			Offset:  0,
-			Timeout: 30,
-			Limit:   100,
-		},
-
-		updateHandlers:  make(map[string]HandlerFunc),
-		commandHandlers: new(commandRegistry),
-
-		ChanSize:   0,
-		WorkerPool: runtime.NumCPU(),
-	}
-
-	return &bot
-}
-
 type Bot struct {
 	// Telegram Bot API Token, used to send requests, set webhooks or receive updates using long polling method.
 	// Bot will panic if APi token is empty
@@ -189,15 +165,18 @@ func (b *Bot) Serve() error {
 	wh, err := b.getWebhookInfo()
 	if err != nil {
 		// FIXME: there is a better way to handle this
+		b.Logger.Error(err, "failed to get webhook info")
 		return fmt.Errorf("getting webhook info: %w", err)
 	}
 	if _, ok := b.Receiver.(*LongPolling); ok && wh.URL != "" {
-		return fmt.Errorf("can't use long polling when webhook is set; use deleteWebhook before running long polling bot")
+		b.Logger.Error(err, "can't use long-polling when webhook is set")
+		return fmt.Errorf("can't use long-polling when webhook is set; use deleteWebhook before running long polling bot")
 	}
 
 	// adding the list of handled commands to the bot menu on the client side
 	if err = b.setupCommands(); err != nil {
-		b.Logger.Error(err, "failed to set bot commands")
+		b.Logger.Error(err, "failed to set bot commands; continuing to serve")
+		// bot can function without commands in bot menu
 	}
 
 	defer b.Shutdown()
@@ -236,13 +215,20 @@ func (b *Bot) init() {
 		panic("API token must not be empty")
 	}
 
+	if b.Logger.GetSink() == nil {
+		// no logs by default
+		b.Logger = logr.Discard()
+	}
+
 	if b.Sender == nil {
+		b.Logger.Info("request sender is nil, using default", "sender", "TGBotAPIRequestSender")
 		b.Sender = &TGBotAPIRequestSender{
 			APIToken: b.Token,
 		}
 	}
 
 	if b.Receiver == nil {
+		b.Logger.Info("update receiver is nil, using default", "receiver", "LongPolling")
 		b.Receiver = &LongPolling{
 			Timeout: 30,
 			Offset:  0,
@@ -251,9 +237,14 @@ func (b *Bot) init() {
 	}
 	b.Receiver.PairBot(b)
 
-	if b.Logger.GetSink() == nil {
-		// no logs by default
-		b.Logger = logr.Discard()
+	if b.ChanSize < 0 {
+		b.Logger.Info("channel size is too low, falling back", "was set", b.ChanSize, "defaulting to", 0)
+		b.ChanSize = 0
+	}
+
+	if b.WorkerPool <= 0 {
+		b.Logger.Info("worker pool size is too low, falling back", "was set", b.WorkerPool, "defaulting to", runtime.NumCPU())
+		b.WorkerPool = runtime.NumCPU()
 	}
 
 	if b.updateHandlers == nil {
@@ -261,14 +252,6 @@ func (b *Bot) init() {
 	}
 	if b.commandHandlers == nil {
 		b.commandHandlers = new(commandRegistry)
-	}
-
-	if b.ChanSize < 0 {
-		b.ChanSize = 0
-	}
-
-	if b.WorkerPool <= 0 {
-		b.WorkerPool = runtime.NumCPU()
 	}
 
 	b.ctx, b.cancel = context.WithCancel(context.Background())
@@ -443,7 +426,7 @@ func (b *Bot) work() {
 				ctx:            b.ctx,
 			}
 
-			if upd.Message != nil && upd.Message.IsCommand() {
+			if ctx.updType == UpdateTypeMessage && upd.Message.IsCommand() {
 				cmd, _ = upd.Message.GetCommand()
 
 				handler, exists = b.commandHandlers.GetHandler(cmd)

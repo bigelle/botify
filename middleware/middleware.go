@@ -2,7 +2,6 @@ package middleware
 
 import (
 	"fmt"
-	"log"
 	"time"
 
 	"github.com/bigelle/botify"
@@ -22,7 +21,6 @@ func LoggingMiddleware(next botify.HandlerFunc) botify.HandlerFunc {
 			end = end - req.Duration
 		}
 
-		log.Printf("%s ID=%d %v", ctx.UpdateType(), ctx.UpdateID(), end)
 		ctx.Bot().Logger.Info("handled update", "type", ctx.UpdateType(), "ID", ctx.UpdateID(), "duration", end)
 	}
 }

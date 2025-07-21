@@ -57,8 +57,6 @@ func (lp *LongPolling) ReceiveUpdates(ctx context.Context, chUpdate chan<- Updat
 		get  GetUpdates
 		resp *APIResponse
 		err  error
-		upds []Update
-		upd  Update
 	)
 
 	for {
@@ -81,6 +79,7 @@ func (lp *LongPolling) ReceiveUpdates(ctx context.Context, chUpdate chan<- Updat
 				return resp.GetError()
 			}
 
+			var upds []Update
 			resp.BindResult(&upds)
 
 			// to avoid any rate limits we are sleeping when there's no activity
@@ -89,7 +88,7 @@ func (lp *LongPolling) ReceiveUpdates(ctx context.Context, chUpdate chan<- Updat
 				continue
 			}
 
-			for _, upd = range upds {
+			for _, upd := range upds {
 				chUpdate <- upd
 				lp.Offset = upd.UpdateID + 1
 			}

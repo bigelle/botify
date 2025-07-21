@@ -91,10 +91,6 @@ func (u *Update) UpdateType() string {
 		condition bool
 		result    string
 	}{
-		{u.Message != nil && u.Message.IsCommand(), func() string {
-			cmd, _ := u.Message.GetCommand()
-			return cmd
-		}()},
 		{u.Message != nil, UpdateTypeMessage},
 		{u.EditedMessage != nil, UpdateTypeEditedMessage},
 		{u.ChannelPost != nil, UpdateTypeChannelPost},

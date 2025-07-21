@@ -1,5 +1,7 @@
 package botify
 
+// to avoid overloading the API, this types remains private
+
 type command struct {
 	Name        string
 	Description string
