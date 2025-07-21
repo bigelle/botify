@@ -13,11 +13,17 @@ import (
 	"github.com/bigelle/botify/internal/reused"
 )
 
+// UpdateReceiver is an interface used to receive updates and send them into chUpdate.
+// Since sometimes to receive updates you need to send requests,
+// to make it less awkward it pairs with the bot to get access to it's sender.
 type UpdateReceiver interface {
 	ReceiveUpdates(ctx context.Context, chUpdate chan<- Update) error
 	PairBot(*Bot)
 }
 
+// LongPolling is a long-polling implementation of UpdateReceiver.
+// It sends /getUpdates requests, deserializes the response
+// and sends the updates to the channel
 type LongPolling struct {
 	Offset  int
 	Limit   int
@@ -26,11 +32,14 @@ type LongPolling struct {
 	bot *Bot
 }
 
+// PairBot satisfies the UpdateReceiver interface
 func (lp *LongPolling) PairBot(b *Bot) {
 	lp.bot = b
 	b.Receiver = lp
 }
 
+// ReceiveUpdates sends /getUpdates requests, deserializes the response
+// and sends the updates to the chUpdate
 func (lp *LongPolling) ReceiveUpdates(ctx context.Context, chUpdate chan<- Update) error {
 	if lp.bot.Sender == nil {
 		return fmt.Errorf("long polling bot requires request sender")
@@ -88,12 +97,16 @@ func (lp *LongPolling) ReceiveUpdates(ctx context.Context, chUpdate chan<- Updat
 	}
 }
 
+// Webhook is a implementation for UpdateReceiver,
+// which creates a server on a given ListenAddr
+// and sends /setWebhook request with URL "Host:ExposedPort/Path"
 type Webhook struct {
 	// In format https://example.com
-	Domain string
+	Host string
 	// Webhook Path.
 	Path string
-	// Will be send to the Telegram Bot API server
+	// Will be send to the Telegram Bot API server.
+	// Defaults to 443
 	ExposedPort string
 	// Will be used to run the webhook server
 	ListenAddr string
@@ -111,6 +124,7 @@ type Webhook struct {
 	bot *Bot
 }
 
+// ReceiveUpdates creates a webhook server which will send every incoming update into chUpdate
 func (ws *Webhook) ReceiveUpdates(ctx context.Context, chUpdate chan<- Update) (err error) {
 	if ws.bot.Sender == nil {
 		return fmt.Errorf("can't set webhook: no request sender")
@@ -172,11 +186,14 @@ func (ws *Webhook) ReceiveUpdates(ctx context.Context, chUpdate chan<- Update) (
 	}
 }
 
+// PairBot satisfies the UpdateReceiver interface
 func (wh *Webhook) PairBot(b *Bot) {
 	wh.bot = b
 	b.Receiver = wh
 }
 
+// WebhookURL returns tthe URL to which Telegram Bot API will send updates.
+// If ExposedPort is 443, it will be omitted since it's a default HTTPS port
 func (ws *Webhook) WebhookURL() string {
 	port := ""
 	if ws.ExposedPort != "" && ws.ExposedPort != "443" && ws.ExposedPort != ":443" {
@@ -188,10 +205,15 @@ func (ws *Webhook) WebhookURL() string {
 	if !strings.HasPrefix(ws.Path, "/") {
 		ws.Path = "/" + ws.Path
 	}
-	return fmt.Sprintf("%s%s%s", ws.Domain, port, ws.Path)
+	return fmt.Sprintf("%s%s%s", ws.Host, port, ws.Path)
 }
 
+// SetWebhook sends /setWebhook request
 func (ws *Webhook) SetWebhook(ctx context.Context, allowedUpdates []string) error {
+	if ws.bot == nil || ws.bot.Sender == nil {
+		return fmt.Errorf("webhook is not paired with bot")
+	}
+
 	swh := SetWebhook{
 		URL:                ws.WebhookURL(),
 		Certificate:        ws.Certificate,
