@@ -25,27 +25,37 @@ func DefaultBot(token string) *Bot {
 		updateHandlers:  make(map[string]HandlerFunc),
 		commandHandlers: new(commandRegistry),
 
-		bufSize:    0,
-		workerPool: runtime.NumCPU(),
+		ChanSize:   0,
+		WorkerPool: runtime.NumCPU(),
 	}
 
 	return &bot
 }
 
 type Bot struct {
-	// configurable
-	Token    string
-	Sender   RequestSender
+	// Telegram Bot API Token, used to send requests, set webhooks or receive updates using long polling method.
+	// Bot will panic if APi token is empty
+	Token string
+	// Sends requests to Bot API.
+	// If nil, defaults to [TGBotAPIRequestSender]
+	Sender RequestSender
+	// Receives updates from API.
+	// If nil, defaults to [LongPolling]
 	Receiver UpdateReceiver
-	Logger   logr.Logger
+	// Logs info about any errors, warnings, outgoing requests, etc.
+	// Defaults to [logr.Discard()]
+	Logger logr.Logger
+	// The size for update channel.
+	// Unbuffered by default.
+	ChanSize int
+	// The size of the worker pool.
+	// Defaults to the number of CPU cores.
+	WorkerPool int
 
-	// only through methods
+	// only through methods, for stabilitty
 	updateHandlers  map[string]HandlerFunc
 	commandHandlers *commandRegistry
-	bufSize         int
-	workerPool      int
 
-	// runtime
 	chUpdate chan Update
 	ctx      context.Context
 	cancel   context.CancelFunc
@@ -53,6 +63,10 @@ type Bot struct {
 	initErr error
 }
 
+// Handle assigns handler to work with incoming updates of type t.
+// See [API specs for Update] for a complete list of available update types.
+//
+// [API specs for Update]: https://core.telegram.org/bots/api#update
 func (b *Bot) Handle(t string, handler HandlerFunc) *Bot {
 	if b.updateHandlers == nil {
 		b.updateHandlers = make(map[string]HandlerFunc)
@@ -67,11 +81,15 @@ func (b *Bot) Handle(t string, handler HandlerFunc) *Bot {
 
 // LocaleMap is used to provide a localization for the command.
 // The key must be a two-letter ISO 639-1 language code.
-// The value must be 1-256 characters long.
+// The value must be 1-256 characters long command description.
 type LocaleMap map[string]string
 
-// NOTE: if, for example, bot has commands in both private chat and default scope, and you're opening the bot menu in a private chat,
-// you would see only private chat commands.
+// HandleCommandWithLocales assigns the handler to work with the cmd command.
+// Once the bot is launched, it will send a request to /setMyCommands,
+// adding the cmd command to the bot's list of commands in each given scopes and with each given locales translation
+//
+// NOTE: if, for example, a command is assigned to private chat and default scope,
+// and you open the list of commands in private chat, you will see only private commands.
 //
 // See [Determining list of commands] for details.
 //
@@ -136,8 +154,12 @@ func (b *Bot) HandleCommandWithLocales(cmd string, locales LocaleMap, handler Ha
 	return b
 }
 
-// NOTE: if , for example, bot has commands in both private chat and default scope, and you're opening the bot menu in a private chat,
-// you would see only private chat commands.
+// HandleCommand assigns the handler to work with the cmd command.
+// Once the bot is launched, it will send a request to /setMyCommands,
+// adding the cmd command to the bot's list of commands in each given scopes with desc as command description
+//
+// NOTE: if, for example, a command is assigned to private chat and default scope,
+// and you open the list of commands in private chat, you will see only private commands.
 //
 // See [Determining list of commands] for details.
 //
@@ -146,22 +168,13 @@ func (b *Bot) HandleCommand(cmd, desc string, handler HandlerFunc, scopes ...Bot
 	return b.HandleCommandWithLocales(cmd, LocaleMap{"en": desc}, handler, scopes...)
 }
 
-func (b *Bot) WithChannelSize(l int) *Bot {
-	if l >= 0 {
-		b.bufSize = l
-	}
-
-	return b
-}
-
-func (b *Bot) WithWorkerPool(l int) *Bot {
-	if l > 0 {
-		b.workerPool = l
-	}
-
-	return b
-}
-
+// Serve is launching the bot.
+// It will panic if bot has empty API tolen.
+// It will return an error if:
+//  1. something went wrong when requesting webhook info
+//  2. you're trying to run long-polling bot when webhook is set 
+//     (you should send /deleteWebhook request first)
+//  3. something went wrong in [UpdateReceiver] and it can no longer receive updates
 func (b *Bot) Serve() error {
 	if b.initErr != nil {
 		return fmt.Errorf("configuration error: %w", b.initErr)
@@ -182,12 +195,12 @@ func (b *Bot) Serve() error {
 
 	// adding the list of handled commands to the bot menu on the client side
 	if err = b.setupCommands(); err != nil {
-		return fmt.Errorf("setting up commands: %w", err)
+		b.Logger.Error(err, "failed to set bot commands")
 	}
 
 	defer b.Shutdown()
 
-	for range b.workerPool {
+	for range b.WorkerPool {
 		go b.work()
 	}
 
@@ -196,6 +209,7 @@ func (b *Bot) Serve() error {
 
 // TODO: make it more graceful
 
+// currently no use actually
 func (b *Bot) Shutdown() error {
 	b.cancel()
 	close(b.chUpdate)
@@ -245,17 +259,17 @@ func (b *Bot) init() {
 		b.commandHandlers = new(commandRegistry)
 	}
 
-	if b.bufSize < 0 {
-		b.bufSize = 0
+	if b.ChanSize < 0 {
+		b.ChanSize = 0
 	}
 
-	if b.workerPool <= 0 {
-		b.workerPool = runtime.NumCPU()
+	if b.WorkerPool <= 0 {
+		b.WorkerPool = runtime.NumCPU()
 	}
 
 	b.ctx, b.cancel = context.WithCancel(context.Background())
 
-	b.chUpdate = make(chan Update, b.bufSize)
+	b.chUpdate = make(chan Update, b.ChanSize)
 }
 
 func (b *Bot) getWebhookInfo() (*WebhookInfo, error) {
@@ -408,7 +422,7 @@ func (b *Bot) work() {
 		ctx     Context
 		cmd     string
 		handler HandlerFunc
-		ok      bool
+		exists      bool
 	)
 
 	for {
@@ -428,13 +442,13 @@ func (b *Bot) work() {
 			if upd.Message != nil && upd.Message.IsCommand() {
 				cmd, _ = upd.Message.GetCommand()
 
-				handler, ok = b.commandHandlers.GetHandler(cmd)
-				if ok {
+				handler, exists = b.commandHandlers.GetHandler(cmd)
+				if exists {
 					handler(&ctx)
 				}
 			} else {
-				handler, ok = b.updateHandlers[ctx.updType]
-				if ok {
+				handler, exists = b.updateHandlers[ctx.updType]
+				if exists {
 					handler(&ctx)
 				}
 			}
