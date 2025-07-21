@@ -4,54 +4,85 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
+	"time"
 
 	"github.com/bigelle/botify/internal/reused"
 )
 
+const TelegramBotAPIHost = "https://api.telegram.org"
+
+var ErrNoResult = errors.New("the response has no result")
+
+// ChatMigratedError is an error signalizing that the group has been migrated to the supergroup
+// and holding the new group identifier as int
 type ChatMigratedError int
 
 func (e ChatMigratedError) Error() string {
 	return fmt.Sprintf("the group has been migrated to the supergroup with the identiefier %d", e)
 }
 
+// TooManyRequestsError is an error signalizing that you have exceeded the flood control
+// and holding the number of seconds left to wait before the request can be repeated
 type TooManyRequestsError int
 
 func (e TooManyRequestsError) Error() string {
 	return fmt.Sprintf("too many requests; retry after %d seconds", e)
 }
 
+// BadRequestError is an error signalizing that the request is failed
+// and holding a human readable error description as string
 type BadRequestError string
 
 func (e BadRequestError) Error() string {
 	return string(e)
 }
 
+// APIResponse is a response from Telegram Bot API
 type APIResponse struct {
-	Ok          bool                `json:"ok"`
-	Description string              `json:"description"`
-	Result      json.RawMessage     `json:"result"`
-	ErrorCode   int                 `json:"error_code"`
-	Parameters  *ResponseParameters `json:"parameters"`
+	// True if success, false otherwise
+	Ok bool `json:"ok"`
+	// Optional. If ok is true, it has a human-readable description of the result.
+	// If ok is false, it explains the error
+	Description string `json:"description"`
+	// Optional. If ok is true, the result is available here through the BindResult method.
+	Result json.RawMessage `json:"result"`
+	// Optional. If ok is false, it has the error code
+	ErrorCode int `json:"error_code"`
+	// Optional. If ok is false, it may have extra information to automatically handle the error
+	Parameters *ResponseParameters `json:"parameters"`
 }
 
+// BindResult is used to write response result to dest.
+// It will return ErrNoResult if the response has no result,
+// or any JSON decoding error if something went wrong
 func (r *APIResponse) BindResult(dest any) error {
+	if len(r.Result) == 0 {
+		return ErrNoResult
+	}
+
 	dec := json.NewDecoder(bytes.NewReader(r.Result))
 	dec.DisallowUnknownFields()
 
 	if err := dec.Decode(dest); err != nil {
-		return fmt.Errorf("binding result: %w", err)
+		return fmt.Errorf("decoding result field: %w", err)
 	}
 
 	return nil
 }
 
+// IsSuccessful is a more readable wrapper around `if r.Ok`
 func (r *APIResponse) IsSuccessful() bool {
 	return r.Ok
 }
 
+// GetError returns nil if the request was successfull,
+// ChatMigratedError if MigrateToChatId is not nil,
+// TooManyRequestsError if RetryAfter is not nil,
+// and BadRequestError with the error description if there's nothing more suitable
 func (r *APIResponse) GetError() error {
 	if r.IsSuccessful() {
 		return nil
@@ -70,10 +101,13 @@ func (r *APIResponse) GetError() error {
 	return fmt.Errorf("%d: %s", r.ErrorCode, BadRequestError(r.Description))
 }
 
+// ResponseParameters helps to automatically handle the error
 type ResponseParameters struct {
 	MigrateToChatID *int `json:"migrate_to_chat_id"`
 	RetryAfter      *int `json:"retry_after"`
 }
+
+// RequestSender is a unified way to send requests
 type RequestSender interface {
 	Send(obj APIMethod) (*APIResponse, error)
 	SendWithContext(ctx context.Context, obj APIMethod) (*APIResponse, error)
@@ -81,24 +115,21 @@ type RequestSender interface {
 	SendRawWithContext(ctx context.Context, method string, obj any) (*APIResponse, error)
 }
 
-func DefaultRequestSender(token string) RequestSender {
-	return &TGBotAPIRequestSender{
-		Client:   http.DefaultClient,
-		APIToken: token,
-		APIHost:  "https://api.telegram.org/",
-	}
-}
-
+// TGBotAPIRequestSender is a default request sender.
+// Every method returns APIResponse and it's error, no matter if it's successful or not.
+// So there's no need to check for `if resp.GetError() != nil` after every request
 type TGBotAPIRequestSender struct {
 	Client   *http.Client
 	APIToken string
 	APIHost  string
 }
 
+// Send satisfies RequestSender interface
 func (s *TGBotAPIRequestSender) Send(obj APIMethod) (apiResp *APIResponse, err error) {
 	return s.SendWithContext(context.Background(), obj)
 }
 
+// SendWithContext satisfies RequestSender interface
 func (s *TGBotAPIRequestSender) SendWithContext(ctx context.Context, obj APIMethod) (apiResp *APIResponse, err error) {
 	if obj == nil {
 		return nil, fmt.Errorf("obj can't be empty")
@@ -117,10 +148,12 @@ func (s *TGBotAPIRequestSender) SendWithContext(ctx context.Context, obj APIMeth
 	return s.send(ctx, obj.Method(), payload, obj.ContentType())
 }
 
+// SendRaw satisfies RequestSender interface
 func (s *TGBotAPIRequestSender) SendRaw(method string, obj any) (apiResp *APIResponse, err error) {
 	return s.SendRawWithContext(context.Background(), method, obj)
 }
 
+// SendRawWithContext satisfies RequestSender interface
 func (s *TGBotAPIRequestSender) SendRawWithContext(ctx context.Context, method string, obj any) (apiResp *APIResponse, err error) {
 	if method == "" {
 		return nil, fmt.Errorf("method can't be empty")
@@ -145,13 +178,24 @@ func (s *TGBotAPIRequestSender) SendRawWithContext(ctx context.Context, method s
 
 func (s *TGBotAPIRequestSender) send(ctx context.Context, method string, payload io.Reader, contentType string) (apiResp *APIResponse, err error) {
 	if s.Client == nil {
-		s.Client = http.DefaultClient
+		s.Client = &http.Client{
+			Timeout: 30 * time.Second,
+			Transport: &http.Transport{
+				MaxIdleConns:        100,
+				MaxIdleConnsPerHost: 100,
+				IdleConnTimeout:     90 * time.Second,
+				DisableKeepAlives:   false,
+			},
+		}
+	}
+	if s.APIHost == "" {
+		s.APIHost = TelegramBotAPIHost
 	}
 
 	var req *http.Request
 	var resp *http.Response
 
-	reqURL := fmt.Sprintf("%sbot%s/%s", s.APIHost, s.APIToken, method)
+	reqURL := fmt.Sprintf("%s/bot%s/%s", s.APIHost, s.APIToken, method)
 	forDebugURL := fmt.Sprintf("%sbot<API token with length = %d>/%s", s.APIHost, len(s.APIToken), method)
 
 	req, err = http.NewRequestWithContext(ctx, "POST", reqURL, payload)
@@ -173,5 +217,5 @@ func (s *TGBotAPIRequestSender) send(ctx context.Context, method string, payload
 		return nil, fmt.Errorf("reading API response: %w", err)
 	}
 
-	return apiResp, nil
+	return apiResp, apiResp.GetError()
 }

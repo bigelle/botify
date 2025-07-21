@@ -11,11 +11,13 @@ import (
 )
 
 func DefaultBot(token string) *Bot {
-	sender := DefaultRequestSender(token)
+	sender := TGBotAPIRequestSender{
+		APIToken: token,
+	}
 
 	bot := Bot{
 		Token:  token,
-		Sender: sender,
+		Sender: &sender,
 		Receiver: &LongPolling{
 			Offset:  0,
 			Timeout: 30,
@@ -172,7 +174,7 @@ func (b *Bot) HandleCommand(cmd, desc string, handler HandlerFunc, scopes ...Bot
 // It will panic if bot has empty API tolen.
 // It will return an error if:
 //  1. something went wrong when requesting webhook info
-//  2. you're trying to run long-polling bot when webhook is set 
+//  2. you're trying to run long-polling bot when webhook is set
 //     (you should send /deleteWebhook request first)
 //  3. something went wrong in [UpdateReceiver] and it can no longer receive updates
 func (b *Bot) Serve() error {
@@ -235,7 +237,9 @@ func (b *Bot) init() {
 	}
 
 	if b.Sender == nil {
-		b.Sender = DefaultRequestSender(b.Token)
+		b.Sender = &TGBotAPIRequestSender{
+			APIToken: b.Token,
+		}
 	}
 
 	if b.Receiver == nil {
@@ -422,7 +426,7 @@ func (b *Bot) work() {
 		ctx     Context
 		cmd     string
 		handler HandlerFunc
-		exists      bool
+		exists  bool
 	)
 
 	for {
