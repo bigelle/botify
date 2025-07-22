@@ -25,6 +25,11 @@ func (e ChatMigratedError) Error() string {
 	return fmt.Sprintf("the group has been migrated to the supergroup with the identiefier %d", e)
 }
 
+// NewChatID returns the new indenitifier for the migrated group
+func (e ChatMigratedError) NewChatID() int {
+	return int(e)
+}
+
 // TooManyRequestsError is an error signalizing that you have exceeded the flood control
 // and holding the number of seconds left to wait before the request can be repeated
 type TooManyRequestsError int
@@ -129,11 +134,17 @@ type RequestSender interface {
 // So there's no need to manually check for `if resp.GetError() != nil` after every request.
 //
 // If the request fails and if the response parameters contains a "retry_after" field,
-// it will try to send the request again after n seconds, where n is the value of the "retry_after" field
+// it will try to send the request one more time after n seconds, where n is the value of the "retry_after" field
 type TGBotAPIRequestSender struct {
-	Client   *http.Client
+	// HTTP Client used to send requests.
+	// Defaults to a client optimised for keeping connection alive
+	Client *http.Client
+	// Telegram Bot API token.
+	// If empty, every method will cause panic
 	APIToken string
-	APIHost  string
+	// In format `https://example.com`.
+	// Defaults to [TelegramBotAPIHost]
+	APIHost string
 }
 
 // Send satisfies RequestSender interface
@@ -147,16 +158,11 @@ func (s *TGBotAPIRequestSender) SendWithContext(ctx context.Context, obj APIMeth
 		return nil, fmt.Errorf("obj can't be empty")
 	}
 
-	if ctx == nil {
-		ctx = context.Background()
-	}
-
 	var payload io.Reader
 	payload, err = obj.Payload()
 	if err != nil {
 		return nil, fmt.Errorf("forming request payload: %w", err)
 	}
-
 	return s.send(ctx, obj.Method(), payload, obj.ContentType())
 }
 
@@ -171,10 +177,6 @@ func (s *TGBotAPIRequestSender) SendRawWithContext(ctx context.Context, method s
 		return nil, fmt.Errorf("method can't be empty")
 	}
 
-	if ctx == nil {
-		ctx = context.Background()
-	}
-
 	var payload *bytes.Buffer
 	if obj != nil {
 		payload = reused.Buf()
@@ -184,11 +186,13 @@ func (s *TGBotAPIRequestSender) SendRawWithContext(ctx context.Context, method s
 			return nil, fmt.Errorf("encoding request payload: %w", err)
 		}
 	}
-
 	return s.send(ctx, method, payload, "application/json")
 }
 
 func (s *TGBotAPIRequestSender) send(ctx context.Context, method string, payload io.Reader, contentType string) (apiResp *APIResponse, err error) {
+	if s.APIToken == "" {
+		panic("API Token is empty")
+	}
 	if s.Client == nil {
 		s.Client = &http.Client{
 			Timeout: 30 * time.Second,
@@ -203,18 +207,20 @@ func (s *TGBotAPIRequestSender) send(ctx context.Context, method string, payload
 	if s.APIHost == "" {
 		s.APIHost = TelegramBotAPIHost
 	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
 
 	var req *http.Request
 	var resp *http.Response
 
 	reqURL := fmt.Sprintf("%s/bot%s/%s", s.APIHost, s.APIToken, method)
-	forDebugURL := fmt.Sprintf("%sbot<API token with length = %d>/%s", s.APIHost, len(s.APIToken), method)
+	forDebugURL := fmt.Sprintf("%s/bot<API token with length = %d>/%s", s.APIHost, len(s.APIToken), method)
 
 	req, err = http.NewRequestWithContext(ctx, "POST", reqURL, payload)
 	if err != nil {
 		return nil, fmt.Errorf("creating request with URL %s: %w", forDebugURL, err)
 	}
-
 	if contentType != "" {
 		req.Header.Add("Content-Type", contentType)
 	}
@@ -229,7 +235,6 @@ func (s *TGBotAPIRequestSender) send(ctx context.Context, method string, payload
 		if err = json.NewDecoder(resp.Body).Decode(&apiResp); err != nil {
 			return nil, fmt.Errorf("reading API response: %w", err)
 		}
-
 		return apiResp, apiResp.GetError()
 	}
 
