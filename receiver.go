@@ -81,13 +81,12 @@ func (lp *LongPolling) ReceiveUpdates(ctx context.Context, chUpdate chan<- Updat
 
 			var upds []Update
 			resp.BindResult(&upds)
-
+			
 			// to avoid any rate limits we are sleeping when there's no activity
 			if len(upds) == 0 {
 				time.Sleep(1 * time.Second)
 				continue
 			}
-
 			for _, upd := range upds {
 				chUpdate <- upd
 				lp.Offset = upd.UpdateID + 1
@@ -143,12 +142,10 @@ func (ws *Webhook) ReceiveUpdates(ctx context.Context, chUpdate chan<- Update) (
 	if ws.ListenAddr == "" {
 		ws.ListenAddr = ":443"
 	}
-
 	server := &http.Server{
 		Addr:    ws.ListenAddr,
 		Handler: mux,
 	}
-
 	serverErr := make(chan error, 1)
 
 	go func() {
@@ -170,7 +167,6 @@ func (ws *Webhook) ReceiveUpdates(ctx context.Context, chUpdate chan<- Update) (
 
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
-
 		if err = server.Shutdown(shutdownCtx); err != nil {
 			ws.bot.Logger.Error(err, "error shutting down webhook server")
 			return err
@@ -212,7 +208,6 @@ func (ws *Webhook) SetWebhook(ctx context.Context, allowedUpdates []string) erro
 	if ws.bot == nil || ws.bot.Sender == nil {
 		return fmt.Errorf("webhook is not paired with bot")
 	}
-
 	swh := SetWebhook{
 		URL:                ws.WebhookURL(),
 		Certificate:        ws.Certificate,
@@ -222,16 +217,13 @@ func (ws *Webhook) SetWebhook(ctx context.Context, allowedUpdates []string) erro
 		DropPendingUpdates: ws.DropPendingUpdates,
 		SecretToken:        ws.SecretToken,
 	}
-
 	resp, err := ws.bot.Sender.SendWithContext(ctx, &swh)
 	if err != nil {
 		return fmt.Errorf("sending setWebhook request: %w", err)
 	}
-
 	if err = resp.GetError(); err != nil {
 		return fmt.Errorf("setting webhook: %w", err)
 	}
-
 	return nil
 }
 
@@ -239,13 +231,10 @@ func (ws *Webhook) handlerFunc(chUpdate chan<- Update) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		defer r.Body.Close()
 
-		var err error
-
 		if r.Method != "POST" {
 			w.WriteHeader(http.StatusMethodNotAllowed)
 			return
 		}
-
 		if ws.SecretToken != "" {
 			t := r.Header.Get("X-Telegram-Bot-Api-Secret-Token")
 			if ws.SecretToken != t {
@@ -254,6 +243,7 @@ func (ws *Webhook) handlerFunc(chUpdate chan<- Update) http.HandlerFunc {
 			}
 		}
 
+		var err error
 		buf := reused.Buf()
 		defer reused.PutBuf(buf)
 
@@ -266,7 +256,6 @@ func (ws *Webhook) handlerFunc(chUpdate chan<- Update) http.HandlerFunc {
 
 		dec := json.NewDecoder(buf)
 		// dec.DisallowUnknownFields() //FIXME:
-
 		var upd Update
 		if err = dec.Decode(&upd); err != nil {
 			w.WriteHeader(http.StatusBadRequest)
@@ -275,7 +264,6 @@ func (ws *Webhook) handlerFunc(chUpdate chan<- Update) http.HandlerFunc {
 		}
 
 		chUpdate <- upd
-
 		w.WriteHeader(http.StatusOK)
 	}
 }

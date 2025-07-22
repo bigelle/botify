@@ -52,12 +52,12 @@ func (m *GetUpdates) Method() string {
 
 func (m *GetUpdates) Payload() (io.Reader, error) {
 	buf := bytes.NewBuffer(make([]byte, 0, 512))
+	enc := json.NewEncoder(buf)
+	enc.SetEscapeHTML(false)
 
-	err := json.NewEncoder(buf).Encode(m)
-	if err != nil {
+	if err := enc.Encode(m); err != nil {
 		return nil, fmt.Errorf("encoding getUpdates payload: %w", err)
 	}
-
 	return buf, nil
 }
 
@@ -91,23 +91,20 @@ func (m *SetWebhook) Method() string {
 
 func (m *SetWebhook) Payload() (io.Reader, error) {
 	if _, ok := m.Certificate.(InputFileRemote); ok {
-		return nil, fmt.Errorf("can't upload the certificate from a remote source; use a local file")
+		return nil, fmt.Errorf("can't upload a certificate from a remote source; use a local file")
 	}
 
 	if m.Certificate == nil {
 		// then there's no need to send multipart
-		buf := bytes.NewBuffer(make([]byte, 0, 1024))
-
+		buf := bytes.NewBuffer(make([]byte, 0, 512))
 		enc := json.NewEncoder(buf)
 		enc.SetEscapeHTML(false)
 
 		if err := enc.Encode(m); err != nil {
 			return nil, fmt.Errorf("encoding setWebhook payload as JSON: %w", err)
 		}
-
 		return buf, nil
 	}
-
 	return m.multipart()
 }
 
@@ -115,23 +112,19 @@ func (m *SetWebhook) multipart() (io.Reader, error) {
 	var err error
 
 	buf := bytes.NewBuffer(make([]byte, 0, 4*1024))
-
 	mw := multipart.NewWriter(buf)
-	defer mw.Close()
-
 	m.ct = mw.FormDataContentType()
+	defer mw.Close()
 
 	if err = mw.WriteField("url", m.URL); err != nil {
 		return nil, fmt.Errorf("writing form field: %w", err)
 	}
 
 	cert := m.Certificate.(InputFileLocal)
-
 	part, err := mw.CreateFormFile("certificate", cert.Name)
 	if err != nil {
 		return nil, fmt.Errorf("creating form file: %w", err)
 	}
-
 	_, err = io.Copy(part, cert.Data)
 	if err != nil {
 		return nil, fmt.Errorf("writing form file: %w", err)
@@ -228,13 +221,13 @@ func (m *SendMessage) Method() string {
 }
 
 func (m *SendMessage) Payload() (io.Reader, error) {
-	buf := bytes.NewBuffer(make([]byte, 0, 4*1024))
+	buf := bytes.NewBuffer(make([]byte, 0, 1024))
+	enc := json.NewEncoder(buf)
+	enc.SetEscapeHTML(false)
 
-	err := json.NewEncoder(buf).Encode(m)
-	if err != nil {
+	if err := enc.Encode(m); err != nil {
 		return nil, fmt.Errorf("encoding sendMessage payload: %w", err)
 	}
-
 	return buf, nil
 }
 
@@ -256,19 +249,16 @@ func (m *SendPhoto) Method() string {
 }
 
 func (m *SendPhoto) Payload() (io.Reader, error) {
-	buf := bytes.NewBuffer(make([]byte, 4*1024))
-
 	if local, ok := m.Photo.(InputFileLocal); ok {
+		buf := bytes.NewBuffer(make([]byte, 4*1024))
 		mw := multipart.NewWriter(buf)
 		defer mw.Close()
-
 		m.ct = mw.FormDataContentType()
 
 		part, err := mw.CreateFormFile("photo", local.Name)
 		if err != nil {
 			return nil, fmt.Errorf("creating form file: %w", err)
 		}
-
 		_, err = io.Copy(part, local.Data)
 		if err != nil {
 			return nil, fmt.Errorf("writing form file: %w", err)
@@ -283,15 +273,13 @@ func (m *SendPhoto) Payload() (io.Reader, error) {
 	}
 
 	m.ct = "application/json"
-
+	buf := bytes.NewBuffer(make([]byte, 1024))
 	enc := json.NewEncoder(buf)
 	enc.SetEscapeHTML(false)
 
-	err := enc.Encode(m)
-	if err != nil {
+	if err := enc.Encode(m); err != nil {
 		return nil, fmt.Errorf("encoding sendPhoto JSON payload: %w", err)
 	}
-
 	return buf, nil
 }
 
@@ -309,16 +297,13 @@ func (m *GetMyCommands) ContentType() string {
 }
 
 func (m *GetMyCommands) Payload() (io.Reader, error) {
-	buf := bytes.NewBuffer(make([]byte, 0, 4*1024))
-
+	buf := bytes.NewBuffer(make([]byte, 0, 128))
 	enc := json.NewEncoder(buf)
 	enc.SetEscapeHTML(false)
 
-	err := enc.Encode(m)
-	if err != nil {
+	if err := enc.Encode(m); err != nil {
 		return nil, fmt.Errorf("encoding getMyCommands JSON payload: %w", err)
 	}
-
 	return buf, nil
 }
 
@@ -337,15 +322,12 @@ func (m *SetMyCommands) ContentType() string {
 }
 
 func (m *SetMyCommands) Payload() (io.Reader, error) {
-	buf := bytes.NewBuffer(make([]byte, 0, 4*1024))
-
+	buf := bytes.NewBuffer(make([]byte, 0, 1024))
 	enc := json.NewEncoder(buf)
 	enc.SetEscapeHTML(false)
 
-	err := enc.Encode(m)
-	if err != nil {
+	if err := enc.Encode(m); err != nil {
 		return nil, fmt.Errorf("encoding setMyCommands JSON payload: %w", err)
 	}
-
 	return buf, nil
 }

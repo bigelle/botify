@@ -30,7 +30,7 @@ type Bot struct {
 	// Defaults to the number of CPU cores.
 	WorkerPool int
 
-	// only through methods, for stabilitty
+	// only through methods, for stability
 	updateHandlers  map[string]HandlerFunc
 	commandHandlers *commandRegistry
 
@@ -49,11 +49,9 @@ func (b *Bot) Handle(t string, handler HandlerFunc) *Bot {
 	if b.updateHandlers == nil {
 		b.updateHandlers = make(map[string]HandlerFunc)
 	}
-
 	if _, ok := allUpdTypes[t]; ok {
 		b.updateHandlers[t] = handler
 	}
-
 	return b
 }
 
@@ -77,13 +75,11 @@ func (b *Bot) HandleCommandWithLocales(cmd string, locales LocaleMap, handler Ha
 		b.initErr = fmt.Errorf("cmd must be non-empty")
 		return b
 	}
-
-	if b.commandHandlers == nil {
-		b.commandHandlers = new(commandRegistry)
-	}
-
 	if !strings.HasPrefix(cmd, "/") {
 		cmd = "/" + cmd
+	}
+	if b.commandHandlers == nil {
+		b.commandHandlers = new(commandRegistry)
 	}
 
 	var (
@@ -93,10 +89,9 @@ func (b *Bot) HandleCommandWithLocales(cmd string, locales LocaleMap, handler Ha
 
 	for code, desc := range locales {
 		if len(code) != 2 {
-			b.initErr = fmt.Errorf("language code must be a two-letter ISO 639-1: %s", code)
+			b.initErr = fmt.Errorf("language code must be a two-letter ISO 639-1, got: %s", code)
 			return b
 		}
-
 		if len(desc) < 1 || 256 < len(desc) {
 			b.initErr = fmt.Errorf("command description must be 1-256 characters")
 			return b
@@ -105,7 +100,6 @@ func (b *Bot) HandleCommandWithLocales(cmd string, locales LocaleMap, handler Ha
 		if len(scopes) == 0 {
 			b.commandHandlers.AddCommand(cmd, desc, handler)
 		} else {
-
 			if code == "en" {
 				code = "" // to make sure that english description is applied by default
 			}
@@ -124,17 +118,15 @@ func (b *Bot) HandleCommandWithLocales(cmd string, locales LocaleMap, handler Ha
 			}
 
 			b.commandHandlers.AddCommand(cmd, desc, handler, keys...)
-
 			keys = keys[:0]
 		}
 	}
-
 	return b
 }
 
 // HandleCommand assigns the handler to work with the cmd command.
 // Once the bot is launched, it will send a request to /setMyCommands,
-// adding the cmd command to the bot's list of commands in each given scopes with desc as command description
+// adding the cmd command to the bot's list of commands in each given scopes with desc as default command description
 //
 // NOTE: if, for example, a command is assigned to private chat and default scope,
 // and you open the list of commands in private chat, you will see only private commands.
@@ -180,11 +172,9 @@ func (b *Bot) Serve() error {
 	}
 
 	defer b.Shutdown()
-
 	for range b.WorkerPool {
 		go b.work()
 	}
-
 	return b.Receiver.ReceiveUpdates(b.ctx, b.chUpdate)
 }
 
@@ -199,14 +189,12 @@ func (b *Bot) Shutdown() error {
 	if err != nil {
 		return err
 	}
-
 	if !resp.IsSuccessful() {
 		// i mean do i care if it was closed too early?
 		if resp.ErrorCode != 429 {
 			return resp.GetError()
 		}
 	}
-
 	return nil
 }
 
@@ -255,7 +243,6 @@ func (b *Bot) init() {
 	}
 
 	b.ctx, b.cancel = context.WithCancel(context.Background())
-
 	b.chUpdate = make(chan Update, b.ChanSize)
 }
 
@@ -270,7 +257,6 @@ func (b *Bot) getWebhookInfo() (*WebhookInfo, error) {
 	if err != nil {
 		return nil, fmt.Errorf("reading API response: %w", err)
 	}
-
 	return &wh, nil
 }
 
@@ -329,10 +315,6 @@ func (b *Bot) getCurrentCommands(scope BotCommandScope) ([]BotCommand, error) {
 
 	resp, err := b.Sender.Send(&gmc)
 	if err != nil {
-		return nil, fmt.Errorf("sending getMyCommands request: %w", err)
-	}
-
-	if err = resp.GetError(); err != nil {
 		return nil, fmt.Errorf("getting current commands: %w", err)
 	}
 
@@ -340,13 +322,11 @@ func (b *Bot) getCurrentCommands(scope BotCommandScope) ([]BotCommand, error) {
 	if err = resp.BindResult(&commands); err != nil {
 		return nil, fmt.Errorf("binding getMyCommands result: %w", err)
 	}
-
 	return commands, nil
 }
 
 func (b *Bot) setCommands(scope BotCommandScope, commands []command) error {
 	botCommands := make([]BotCommand, 0, len(commands))
-
 	for _, cmd := range commands {
 		botCommands = append(botCommands, BotCommand{
 			Command:     cmd.Name,
@@ -359,15 +339,10 @@ func (b *Bot) setCommands(scope BotCommandScope, commands []command) error {
 		Commands: botCommands,
 	}
 
-	resp, err := b.Sender.Send(&smc)
+	_, err := b.Sender.Send(&smc)
 	if err != nil {
 		return fmt.Errorf("sending setMyCommands request: %w", err)
 	}
-
-	if err = resp.GetError(); err != nil {
-		return fmt.Errorf("setting bot commands: %w", err)
-	}
-
 	return nil
 }
 
@@ -375,7 +350,6 @@ func isEqualCommands(myCommands []command, telegramCommands []BotCommand) bool {
 	if len(myCommands) != len(telegramCommands) {
 		return false
 	}
-
 	if len(myCommands) == 0 {
 		return true
 	}
