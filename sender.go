@@ -33,6 +33,11 @@ func (e TooManyRequestsError) Error() string {
 	return fmt.Sprintf("too many requests; retry after %d seconds", e)
 }
 
+// RetryAfter returns the number of seconds left to wait before the request can be repeated
+func (e TooManyRequestsError) RetryAfter() time.Duration {
+	return time.Second * time.Duration(e)
+}
+
 // BadRequestError is an error signalizing that the request is failed
 // and holding a human readable error description as string
 type BadRequestError string
@@ -120,8 +125,11 @@ type RequestSender interface {
 }
 
 // TGBotAPIRequestSender is a default request sender.
-// Every method returns APIResponse and it's error, no matter if it's successful or not.
-// So there's no need to check for `if resp.GetError() != nil` after every request
+// Every method returns [APIResponse] and the result of APIResponse.GetError(), no matter if it's successful or not.
+// So there's no need to manually check for `if resp.GetError() != nil` after every request.
+//
+// If the request fails and if the response parameters contains a "retry_after" field,
+// it will try to send the request again after n seconds, where n is the value of the "retry_after" field
 type TGBotAPIRequestSender struct {
 	Client   *http.Client
 	APIToken string
@@ -211,15 +219,27 @@ func (s *TGBotAPIRequestSender) send(ctx context.Context, method string, payload
 		req.Header.Add("Content-Type", contentType)
 	}
 
-	resp, err = s.Client.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("sending request with URL %s: %w", forDebugURL, err)
-	}
-	defer resp.Body.Close()
+	sendRequest := func(req *http.Request) (*APIResponse, error) {
+		resp, err = s.Client.Do(req)
+		if err != nil {
+			return nil, fmt.Errorf("sending request with URL %s: %w", forDebugURL, err)
+		}
+		defer resp.Body.Close()
 
-	if err = json.NewDecoder(resp.Body).Decode(&apiResp); err != nil {
-		return nil, fmt.Errorf("reading API response: %w", err)
+		if err = json.NewDecoder(resp.Body).Decode(&apiResp); err != nil {
+			return nil, fmt.Errorf("reading API response: %w", err)
+		}
+
+		return apiResp, apiResp.GetError()
 	}
 
-	return apiResp, apiResp.GetError()
+	var errRateLimit TooManyRequestsError
+
+	apiResp, err = sendRequest(req)
+	if apiResp == nil && errors.As(err, &errRateLimit) {
+		time.Sleep(errRateLimit.RetryAfter())
+
+		apiResp, err = sendRequest(req)
+	}
+	return apiResp, err
 }
