@@ -134,37 +134,46 @@ type RequestInfo struct {
 	Duration    time.Duration
 }
 
-// returns a read-only copy of the currently active bot
+// Bot returns a read-only copy of the bot that created this context
 func (c *Context) Bot() Bot {
 	return *c.bot
 }
 
-func (c *Context) Send(obj APIMethod) (*APIResponse, error) {
-	start := time.Now()
-	resp, err := c.bot.Sender.SendWithContext(c.ctx, obj)
-	end := time.Since(start) // used mostly for measuring the network latencies
-	// but it also measures the time took by writing the request body
-	ct, _, _ := strings.Cut(obj.ContentType(), ";")
-
-	c.sendedRequests = slices.Grow(c.sendedRequests, 1)
-	c.sendedRequests = append(c.sendedRequests, RequestInfo{
-		Method:      obj.Method(),
-		ContentType: ct,
-		Duration:    end,
-	})
-
-	return resp, err
+func (c *Context) SendRequest(obj APIMethod) (*APIResponse, error) {
+	return c.SendRequestContext(c.ctx, obj)
 }
 
-func (c *Context) SendRaw(method string, obj any) (*APIResponse, error) {
+func (c *Context) SendRawRequest(method string, obj any) (*APIResponse, error) {
+	return c.SendRawRequestContext(c.ctx, method, obj)
+}
+
+func (c *Context) SendRequestContext(ctx context.Context, obj APIMethod) (*APIResponse, error) {
+	ct, _, _ := strings.Cut(obj.ContentType(), ";")
+	return c.doRequest(ctx, obj.Method(), ct, func(ctx context.Context) (*APIResponse, error) {
+		return c.bot.Sender.SendWithContext(ctx, obj)
+	})
+}
+
+func (c *Context) SendRawRequestContext(ctx context.Context, method string, obj any) (*APIResponse, error) {
+	return c.doRequest(ctx, method, "application/json", func(ctx context.Context) (*APIResponse, error) {
+		return c.bot.Sender.SendRawWithContext(ctx, method, obj)
+	})
+}
+
+func (c *Context) doRequest(
+	ctx context.Context,
+	method string,
+	contentType string,
+	sendFn func(context.Context) (*APIResponse, error),
+) (*APIResponse, error) {
 	start := time.Now()
-	resp, err := c.bot.Sender.SendRawWithContext(c.ctx, method, obj)
+	resp, err := sendFn(ctx)
 	end := time.Since(start)
 
 	c.sendedRequests = slices.Grow(c.sendedRequests, 1)
 	c.sendedRequests = append(c.sendedRequests, RequestInfo{
 		Method:      method,
-		ContentType: "application/json", // i mean, its not possible to send anything besides json
+		ContentType: contentType,
 		Duration:    end,
 	})
 
@@ -200,23 +209,21 @@ func (c *Context) Value(key any) any {
 	return c.ctx.Value(key)
 }
 
-// It is safe to call for MustBindMessage() if the handler is subscribed to UpdateTypeMessage,
+// It is safe to call for MustGetMessage() if the handler is subscribed to UpdateTypeMessage,
 // the return value is always non-nil.
 // Otherwise, it will panic.
-func (c *Context) MustBindMessage() *Message {
+func (c *Context) MustGetMessage() *Message {
 	if c.updType != UpdateTypeMessage {
 		panic("calling MustMessage() when it is known that Update doesn't have any messages")
 	}
-
 	if c.upd.Message == nil {
-		panic("well, it is a message, but somehow it is not")
+		panic("well, it is a message, but somehow it is not") // never happens (i think)
 	}
-
 	return c.upd.Message
 }
 
 // If you're not sure about the update type, it is safe to use TryMessage() and check for a nil value.
 // It will never panic.
-func (c *Context) BindMessage() *Message {
+func (c *Context) GetMessage() *Message {
 	return c.upd.Message
 }
