@@ -6,6 +6,7 @@ import (
 	"runtime"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/go-logr/logr"
 )
@@ -400,20 +401,36 @@ func (b *Bot) work() {
 				ctx:            b.ctx,
 			}
 
-			if ctx.updType == UpdateTypeMessage && upd.Message.IsCommand() {
+			if ctx.UpdateType() == UpdateTypeMessage && upd.Message.IsCommand() {
 				cmd, _ = upd.Message.GetCommand()
 
 				handler, exists = b.commandHandlers.GetHandler(cmd)
 				if exists {
-					handler(&ctx)
+					b.useHandler(handler, &ctx)
 				}
 			} else {
 				handler, exists = b.updateHandlers[ctx.updType]
 				if exists {
-					handler(&ctx)
+					b.useHandler(handler, &ctx)
 				}
 			}
 
 		}
+	}
+}
+
+func (b *Bot) useHandler(handler HandlerFunc, ctx *Context) {
+	start := time.Now()
+	err := handler(ctx)
+	end := time.Since(start)
+
+	for _, req := range ctx.sendedRequests {
+		end = end - req.Duration
+	}
+
+	if err != nil {
+		b.Logger.Error(err, "error handling update", "type", ctx.UpdateType(), "ID", ctx.UpdateID())
+	} else {
+		b.Logger.Info("handled update", "type", ctx.UpdateType(), "ID", ctx.UpdateID(), "duration", end)
 	}
 }

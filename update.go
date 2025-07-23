@@ -108,13 +108,16 @@ func (u *Update) UpdateType() string {
 	return ""
 }
 
-type HandlerFunc func(ctx *Context)
+type HandlerFunc func(ctx *Context) error
 
 func ChainHandlers(handlers ...HandlerFunc) HandlerFunc {
-	return func(ctx *Context) {
+	return func(ctx *Context) error {
 		for _, handler := range handlers {
-			handler(ctx)
+			if err := handler(ctx); err != nil {
+				return err
+			}
 		}
+		return nil
 	}
 }
 

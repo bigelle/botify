@@ -250,7 +250,6 @@ func (m *Message) GetCommand() (string, error) {
 	if m.Entities == nil {
 		return "", fmt.Errorf("the message has no entities")
 	}
-
 	if m.Text == nil {
 		return "", fmt.Errorf("the message text is empty")
 	}
@@ -264,7 +263,6 @@ func (m *Message) GetCommand() (string, error) {
 			return string(runes[ent.Offset : ent.Offset+ent.Length]), nil
 		}
 	}
-
 	return "", fmt.Errorf("the message has no commands")
 }
 
