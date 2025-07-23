@@ -414,7 +414,6 @@ func (b *Bot) work() {
 					b.useHandler(handler, &ctx)
 				}
 			}
-
 		}
 	}
 }

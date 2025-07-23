@@ -129,6 +129,9 @@ type RequestSender interface {
 	SendRawWithContext(ctx context.Context, method string, obj any) (*APIResponse, error)
 }
 
+// Alias for map[string]any
+type JSON map[string]any
+
 // TGBotAPIRequestSender is a default request sender.
 // Every method returns [APIResponse] and the result of APIResponse.GetError(), no matter if it's successful or not.
 // So there's no need to manually check for `if resp.GetError() != nil` after every request.
