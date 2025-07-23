@@ -52,16 +52,19 @@ func main() {
     }
 }
 
-func handleStart(ctx *botify.Context) {
+func handleStart(ctx *botify.Context) error {
     // TODO: Implementation of /start command handler
+    return nil
 }
 
-func handleHelp(ctx *botify.Context) {
+func handleHelp(ctx *botify.Context) error {
     // TODO: Implementation of /help command handler
+    return nil
 }
 
-func handleMessage(ctx *botify.Context) {
+func handleMessage(ctx *botify.Context) error {
     // TODO: Handle incoming messages
+    return nil
 }
 ```
 
@@ -180,18 +183,21 @@ Register handlers for specific update types:
 
 ```go
 // Messages
-bot.Handle(botify.UpdateTypeMessage, func(ctx *botify.Context) {
+bot.Handle(botify.UpdateTypeMessage, func(ctx *botify.Context) error {
     // TODO: Handle messages
+    return nil
 })
 
 // Inline queries
-bot.Handle(botify.UpdateTypeInlineQuery, func(ctx *botify.Context) {
+bot.Handle(botify.UpdateTypeInlineQuery, func(ctx *botify.Context) error {
     // TODO: Handle inline queries
+    return nil
 })
 
 // Callback queries
-bot.Handle(botify.UpdateTypeCallbackQuery, func(ctx *botify.Context) {
+bot.Handle(botify.UpdateTypeCallbackQuery, func(ctx *botify.Context) error {
     // TODO: Handle callback queries
+    return nil
 })
 ```
 
