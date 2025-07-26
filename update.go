@@ -86,6 +86,9 @@ type Update struct {
 	// RemovedChatBoost        *ChatBoostRemoved            `json:"removed_chat_boost,omitempty"`
 }
 
+// UpdateType returns update type as defined in [Update]
+// 
+// [Update]: https://core.telegram.org/bots/api#update
 func (u *Update) UpdateType() string {
 	checks := []struct {
 		condition bool
@@ -108,6 +111,8 @@ func (u *Update) UpdateType() string {
 	return ""
 }
 
+// HandlerFunc is a function used to handle incoming updates.
+// The return value is used for logging and testing purposes only
 type HandlerFunc func(ctx *Context) error
 
 func ChainHandlers(handlers ...HandlerFunc) HandlerFunc {
@@ -121,6 +126,11 @@ func ChainHandlers(handlers ...HandlerFunc) HandlerFunc {
 	}
 }
 
+// Context is a "bridge",
+// which allows to use bot settings such as logger or [RequestSender]
+// right from the handler, without the need to store a pointer to the bot's instance.
+// It also collects the information about the update and the requests that was sent by handler using Context,
+// which is useful for logging and debugging
 type Context struct {
 	bot *Bot
 
@@ -131,35 +141,48 @@ type Context struct {
 	ctx context.Context
 }
 
+// RequestInfo contains the information about sended request,
+// including API method name, content-type and it's duration,
+// including request body serialization, network latencies and response body deserialization
 type RequestInfo struct {
 	Method      string
 	ContentType string
 	Duration    time.Duration
 }
 
-// Bot returns a read-only copy of the bot that created this context
+// Bot returns a read-only copy of the [Bot] that created this context
 func (c *Context) Bot() Bot {
 	return *c.bot
 }
 
+// SendRequest is a wrapper around [SendRequestContext],
+// which is using the inner [context.Context] as ctx
 func (c *Context) SendRequest(obj APIMethod) (*APIResponse, error) {
 	return c.SendRequestContext(c.ctx, obj)
 }
 
-func (c *Context) SendRawRequest(method string, obj any) (*APIResponse, error) {
-	return c.SendRawRequestContext(c.ctx, method, obj)
+// SendJSON is a wrapper around [SendJSONContext],
+// which is using the inner [context.Context] as ctx
+func (c *Context) SendJSON(endpoint string, obj any) (*APIResponse, error) {
+	return c.SendJSONContext(c.ctx, endpoint, obj)
 }
 
+// SendRequestContext is using bot's [RequestSender]
+// to send a request with payload, content-type and to the API endpoint, defined in obj,
+// and can be cancelled with ctx
 func (c *Context) SendRequestContext(ctx context.Context, obj APIMethod) (*APIResponse, error) {
 	ct, _, _ := strings.Cut(obj.ContentType(), ";")
-	return c.doRequest(ctx, obj.Method(), ct, func(ctx context.Context) (*APIResponse, error) {
+	return c.doRequest(ctx, obj.APIEndpoint(), ct, func(ctx context.Context) (*APIResponse, error) {
 		return c.bot.Sender.SendWithContext(ctx, obj)
 	})
 }
 
-func (c *Context) SendRawRequestContext(ctx context.Context, method string, obj any) (*APIResponse, error) {
-	return c.doRequest(ctx, method, "application/json", func(ctx context.Context) (*APIResponse, error) {
-		return c.bot.Sender.SendRawWithContext(ctx, method, obj)
+// SendJSONContext is using bot's [RequestSender]
+// to send obj as JSON to the endpoint,
+// and can be cancelled with ctx
+func (c *Context) SendJSONContext(ctx context.Context, endpoint string, obj any) (*APIResponse, error) {
+	return c.doRequest(ctx, endpoint, "application/json", func(ctx context.Context) (*APIResponse, error) {
+		return c.bot.Sender.SendRawWithContext(ctx, endpoint, obj)
 	})
 }
 
@@ -183,36 +206,54 @@ func (c *Context) doRequest(
 	return resp, err
 }
 
-// Use it to make sure that you're working with the expected Update type
+// UpdateType returns update type.
+// Useful for logging or to make sure that the type is what was expected.
+// See [Update] for a complete list of available update types
+//
+// [Update]: https://core.telegram.org/bots/api#update
 func (c *Context) UpdateType() string {
 	return c.updType
 }
 
+// UpdateID returns update ID.
+// Useful for logging
 func (c *Context) UpdateID() int {
 	return c.upd.UpdateID
 }
 
+// SendedRequests returns a slice of [RequestInfo],
+// which contains API method name, Content-Type and it's duration,
+// including request body serialization, network latencies and response body deserialization.
+// Useful for logging
 func (c *Context) SendedRequests() []RequestInfo {
 	return c.sendedRequests
 }
 
+// Context returns [context.Context],
+// which in most cases is [context.WithCancel],
+// controlled by the currently active bot instance.
+// Useful as a parent context for timeouts and deadlines.
 func (c *Context) Context() context.Context {
 	return c.Context()
 }
 
+// SetValue sets the value for the inner [context.Context],
+// which is useful for passing a value between middleware functions
 func (c *Context) SetValue(key, val any) {
 	ctx := c.Context()
 
 	withVal := context.WithValue(ctx, key, val)
-
 	c.ctx = withVal
 }
 
+// Value returns the value from the inner [context.Context],
+// associated with the key
 func (c *Context) Value(key any) any {
 	return c.ctx.Value(key)
 }
 
-// It is safe to call for MustGetMessage() if the handler is subscribed to UpdateTypeMessage,
+// MustGetMessage returns a pointer to the update's [Message].
+// It is safe to call for MustGetMessage if the handler is subscribed to [UpdateTypeMessage],
 // the return value is always non-nil.
 // Otherwise, it will panic.
 func (c *Context) MustGetMessage() *Message {
@@ -225,8 +266,9 @@ func (c *Context) MustGetMessage() *Message {
 	return c.upd.Message
 }
 
-// If you're not sure about the update type, it is safe to use TryMessage() and check for a nil value.
-// It will never panic.
+// GetMessage returns a pointer to the update's [Message].
+// If you're not sure about the update type, it is safe to use GetMessage and check for a nil value.
+// Unlike [MustGetMessage], it will never panic.
 func (c *Context) GetMessage() *Message {
 	return c.upd.Message
 }

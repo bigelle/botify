@@ -10,7 +10,7 @@ import (
 
 type APIMethod interface {
 	ContentType() string
-	Method() string
+	APIEndpoint() string
 	Payload() (io.Reader, error)
 }
 
@@ -22,7 +22,7 @@ func (m methodWithNoParams) ContentType() string {
 	return ""
 }
 
-func (m methodWithNoParams) Method() string {
+func (m methodWithNoParams) APIEndpoint() string {
 	return string(m)
 }
 
@@ -46,7 +46,7 @@ func (m *GetUpdates) ContentType() string {
 	return "application/json"
 }
 
-func (m *GetUpdates) Method() string {
+func (m *GetUpdates) APIEndpoint() string {
 	return "getUpdates"
 }
 
@@ -85,7 +85,7 @@ func (m *SetWebhook) ContentType() string {
 	return m.ct
 }
 
-func (m *SetWebhook) Method() string {
+func (m *SetWebhook) APIEndpoint() string {
 	return "setWebhook"
 }
 
@@ -288,7 +288,7 @@ type GetMyCommands struct {
 	LanguageCode string          `json:"language_code,omitempty"`
 }
 
-func (m *GetMyCommands) Method() string {
+func (m *GetMyCommands) APIEndpoint() string {
 	return "getMyCommands"
 }
 
@@ -313,7 +313,7 @@ type SetMyCommands struct {
 	LanguageCode string          `json:"language_code,omitempty"`
 }
 
-func (m *SetMyCommands) Method() string {
+func (m *SetMyCommands) APIEndpoint() string {
 	return "setMyCommands"
 }
 
