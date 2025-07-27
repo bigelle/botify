@@ -14,6 +14,12 @@ type APIMethod interface {
 	Payload() (io.Reader, error)
 }
 
+type contentTyperJSON struct{}
+
+func (c contentTyperJSON) ContentType() string {
+	return "application/json"
+}
+
 // methodWithNoParams is used to send a request that requires no parameters,
 // meaning there is no request body and it does not require Content-Type header.
 type methodWithNoParams string
@@ -40,10 +46,7 @@ type GetUpdates struct {
 	Limit          int       `json:"limit,omitempty"`
 	Timeout        int       `json:"timeout,omitempty"`
 	AllowedUpdates *[]string `json:"allowed_updates,omitempty"`
-}
-
-func (m *GetUpdates) ContentType() string {
-	return "application/json"
+	contentTyperJSON
 }
 
 func (m *GetUpdates) APIEndpoint() string {
@@ -210,10 +213,7 @@ type SendMessage struct {
 	// Additional interface options. A JSON-serialized object for an inline keyboard,
 	// custom reply keyboard, instructions to remove a reply keyboard or to force a reply from the user
 	// ReplyMarkup *ReplyMarkup `json:"reply_markup,omitempty,"`
-}
-
-func (m *SendMessage) ContentType() string {
-	return "application/json"
+	contentTyperJSON
 }
 
 func (m *SendMessage) Method() string {
@@ -286,14 +286,11 @@ func (m *SendPhoto) Payload() (io.Reader, error) {
 type GetMyCommands struct {
 	Scope        BotCommandScope `json:"scope,omitempty"`
 	LanguageCode string          `json:"language_code,omitempty"`
+	contentTyperJSON
 }
 
 func (m *GetMyCommands) APIEndpoint() string {
 	return "getMyCommands"
-}
-
-func (m *GetMyCommands) ContentType() string {
-	return "application/json"
 }
 
 func (m *GetMyCommands) Payload() (io.Reader, error) {
@@ -311,14 +308,11 @@ type SetMyCommands struct {
 	Commands     []BotCommand    `json:"commands"`
 	Scope        BotCommandScope `json:"scope,omitempty"`
 	LanguageCode string          `json:"language_code,omitempty"`
+	contentTyperJSON
 }
 
 func (m *SetMyCommands) APIEndpoint() string {
 	return "setMyCommands"
-}
-
-func (m *SetMyCommands) ContentType() string {
-	return "application/json"
 }
 
 func (m *SetMyCommands) Payload() (io.Reader, error) {
