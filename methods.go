@@ -20,6 +20,17 @@ func (c contentTyperJSON) ContentType() string {
 	return "application/json"
 }
 
+func jsonPayload(obj any) (io.Reader, error) {
+	buf := bytes.NewBuffer(make([]byte, 0, 512))
+	enc := json.NewEncoder(buf)
+	enc.SetEscapeHTML(false)
+
+	if err := enc.Encode(obj); err != nil {
+		return nil, fmt.Errorf("encoding JSON payload: %w", err)
+	}
+	return buf, nil
+}
+
 // methodWithNoParams is used to send a request that requires no parameters,
 // meaning there is no request body and it does not require Content-Type header.
 type methodWithNoParams string
@@ -54,14 +65,7 @@ func (m *GetUpdates) APIEndpoint() string {
 }
 
 func (m *GetUpdates) Payload() (io.Reader, error) {
-	buf := bytes.NewBuffer(make([]byte, 0, 512))
-	enc := json.NewEncoder(buf)
-	enc.SetEscapeHTML(false)
-
-	if err := enc.Encode(m); err != nil {
-		return nil, fmt.Errorf("encoding getUpdates payload: %w", err)
-	}
-	return buf, nil
+	return jsonPayload(m)
 }
 
 type SetWebhook struct {
@@ -221,14 +225,7 @@ func (m *SendMessage) Method() string {
 }
 
 func (m *SendMessage) Payload() (io.Reader, error) {
-	buf := bytes.NewBuffer(make([]byte, 0, 1024))
-	enc := json.NewEncoder(buf)
-	enc.SetEscapeHTML(false)
-
-	if err := enc.Encode(m); err != nil {
-		return nil, fmt.Errorf("encoding sendMessage payload: %w", err)
-	}
-	return buf, nil
+	return jsonPayload(m)
 }
 
 type SendPhoto struct {
@@ -273,14 +270,7 @@ func (m *SendPhoto) Payload() (io.Reader, error) {
 	}
 
 	m.ct = "application/json"
-	buf := bytes.NewBuffer(make([]byte, 1024))
-	enc := json.NewEncoder(buf)
-	enc.SetEscapeHTML(false)
-
-	if err := enc.Encode(m); err != nil {
-		return nil, fmt.Errorf("encoding sendPhoto JSON payload: %w", err)
-	}
-	return buf, nil
+	return jsonPayload(m)
 }
 
 type GetMyCommands struct {
@@ -294,14 +284,7 @@ func (m *GetMyCommands) APIEndpoint() string {
 }
 
 func (m *GetMyCommands) Payload() (io.Reader, error) {
-	buf := bytes.NewBuffer(make([]byte, 0, 128))
-	enc := json.NewEncoder(buf)
-	enc.SetEscapeHTML(false)
-
-	if err := enc.Encode(m); err != nil {
-		return nil, fmt.Errorf("encoding getMyCommands JSON payload: %w", err)
-	}
-	return buf, nil
+	return jsonPayload(m)
 }
 
 type SetMyCommands struct {
@@ -316,12 +299,5 @@ func (m *SetMyCommands) APIEndpoint() string {
 }
 
 func (m *SetMyCommands) Payload() (io.Reader, error) {
-	buf := bytes.NewBuffer(make([]byte, 0, 1024))
-	enc := json.NewEncoder(buf)
-	enc.SetEscapeHTML(false)
-
-	if err := enc.Encode(m); err != nil {
-		return nil, fmt.Errorf("encoding setMyCommands JSON payload: %w", err)
-	}
-	return buf, nil
+	return jsonPayload(m)
 }
