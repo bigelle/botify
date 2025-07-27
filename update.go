@@ -182,7 +182,7 @@ func (c *Context) SendRequestContext(ctx context.Context, obj APIMethod) (*APIRe
 // and can be cancelled with ctx
 func (c *Context) SendJSONContext(ctx context.Context, endpoint string, obj any) (*APIResponse, error) {
 	return c.doRequest(ctx, endpoint, "application/json", func(ctx context.Context) (*APIResponse, error) {
-		return c.bot.Sender.SendRawWithContext(ctx, endpoint, obj)
+		return c.bot.Sender.SendJSONWithContext(ctx, endpoint, obj)
 	})
 }
 
