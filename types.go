@@ -2097,4 +2097,125 @@ type PreparedInlineMessage struct {
 	BEGIN Payments TYPES
 */
 
+type LabeledPrice struct {
+	Label  string `json:"label"`
+	Amount int    `json:"amount"`
+}
 
+type Invoice struct {
+	Title          string `json:"title"`
+	Description    string `json:"description"`
+	StartParameter string `json:"start_parameter"`
+	Currency       string `json:"currency"`
+	TotalAmount    string `json:"total_amount"`
+}
+
+type ShippingAddress struct {
+	CountryCode string `json:"country_code"`
+	State       string `json:"state"`
+	City        string `json:"city"`
+	StreetLine1 string `json:"street_line1"`
+	StreetLine2 string `json:"street_line2"`
+	PostCode    string `json:"post_code"`
+}
+
+type OrderInfo struct {
+	Name            *string          `json:"name,omitempty"`
+	PhoneNumber     *string          `json:"phone_number,omitempty"`
+	Email           *string          `json:"email,omitempty"`
+	ShippingAddress *ShippingAddress `json:"shipping_address,omitempty"`
+}
+
+type ShippingOption struct {
+	Id     string         `json:"id"`
+	Title  string         `json:"title"`
+	Prices []LabeledPrice `json:"prices"`
+}
+
+type SuccessfulPayment struct {
+	Currency                   string     `json:"currency"`
+	TotalAmount                string     `json:"total_amount"`
+	InvoicePayload             string     `json:"invoice_payload"`
+	SubscriptionExpirationDate *int       `json:"subscription_expiration_date,omitempty"`
+	IsRecurring                *bool      `json:"is_recurring,omitempty"`
+	IsFirstRecurring           *bool      `json:"is_first_recurring,omitempty"`
+	ShippingOptionId           *string    `json:"shipping_option_id,omitempty"`
+	OrderInfo                  *OrderInfo `json:"order_info,omitempty"`
+	TelegramPaymentChargeId    string     `json:"telegram_payment_charge_id"`
+	ProviderPaymentChargeId    string     `json:"provider_payment_charge_id"`
+}
+
+type RefundedPayment struct {
+	Currency                string  `json:"currency"`
+	TotalAmount             int     `json:"total_amount"`
+	InvoicePayload          string  `json:"invoice_payload"`
+	TelegramPaymentChargeId string  `json:"telegram_payment_charge_id"`
+	ProviderPaymentChargeId *string `json:"provider_payment_charge_id,omitempty"`
+}
+
+type ShippingQuery struct {
+	Id              string          `json:"id"`
+	From            User            `json:"from"`
+	InvoicePayload  string          `json:"invoice_payload"`
+	ShippingAddress ShippingAddress `json:"shipping_address"`
+}
+
+type PreCheckoutQuery struct {
+	Id               string     `json:"id"`
+	From             *User      `json:"from"`
+	Currency         string     `json:"currency"`
+	TotalAmount      int        `json:"total_amount"`
+	InvoicePayload   string     `json:"invoice_payload"`
+	ShippingOptionId *string    `json:"shipping_option_id,omitempty"`
+	OrderInfo        *OrderInfo `json:"order_info,omitempty"`
+}
+
+type PaidMediaPurchased struct {
+	User             User   `json:"user"`
+	PaidMediaPayload string `json:"paid_media_payload"`
+}
+
+type RevenueWithdrawalState struct {
+	Type string `json:"type"`
+	Date int    `json:"date"`
+	Url  string `json:"url"`
+}
+
+type AffiliateInfo struct {
+	AffiliateUser     *User `json:"affiliate_user,omitempty"`
+	AffiliateChat     *Chat `json:"affiliate_chat,omitempty"`
+	CommissionPerMile int   `json:"commission_per_mile"`
+	Amount            int   `json:"amount"`
+	NanostarAmount    *int  `json:"nanostar_amount,omitempty"`
+}
+
+type TransactionPartner struct {
+	Type                      string
+	TransactionType           string                  `json:"transaction_type"`
+	User                      User                    `json:"user"`
+	Affiliate                 *AffiliateInfo          `json:"affiliate,omitempty"`
+	InvoicePayload            *string                 `json:"invoice_payload,omitempty,"`
+	SubscriptionPeriod        *int                    `json:"subscription_period"`
+	PaidMedia                 *[]PaidMedia            `json:"paid_media,omitempty,"`
+	PaidMediaPayload          *string                 `json:"paid_media_payload,omitempty,"`
+	Gift                      *Gift                   `json:"gift,omitempty"`
+	PremiumSubscriptionPeriod *int                    `json:"premium_subscription_period"`
+	Chat                      Chat                    `json:"chat"`
+	SponsorUser               *User                   `json:"sponsor_user,omitempty"`
+	CommissionPerMile         int                     `json:"commission_per_mile"`
+	WithdrawalState           *RevenueWithdrawalState `json:"withdrawal_state,omitempty"`
+	RequestCount              int                     `json:"request_count"`
+}
+
+type StarTransaction struct {
+	Id             string              `json:"id"`
+	Amount         int                 `json:"amount"`
+	NanostarAmount *int                `json:"nanostar_amount,omitempty"`
+	Date           int                 `json:"date"`
+	Source         *TransactionPartner `json:"source,omitempty,"`
+	Receiver       *TransactionPartner `json:"receiver,omitempty,"`
+}
+
+type StarTransactions struct {
+	Transactions []StarTransaction `json:"transactions"`
+}
