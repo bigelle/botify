@@ -2219,3 +2219,142 @@ type StarTransaction struct {
 type StarTransactions struct {
 	Transactions []StarTransaction `json:"transactions"`
 }
+
+/*
+	BEGIN Telegram Passport TYPES
+*/
+
+type PassportData struct {
+	Data        []EncryptedPassportElement `json:"data"`
+	Credentials EncryptedCredentials       `json:"credentials"`
+}
+
+type PassportFile struct {
+	FileId       string `json:"file_id"`
+	FileUniqueId string `json:"file_unique_id"`
+	FileSize     int    `json:"file_size"`
+	FileDate     string `json:"file_date"`
+}
+
+type EncryptedPassportElement struct {
+	Type         string          `json:"type"`
+	Data         *string         `json:"data,omitempty"`
+	PhoneNumber  *string         `json:"phone_number,omitempty"`
+	Email        *string         `json:"email,omitempty"`
+	Files        *[]PassportFile `json:"files,omitempty"`
+	FrontSide    *PassportFile   `json:"front_side,omitempty"`
+	ReverseSide  *PassportFile   `json:"reverse_side,omitempty"`
+	Selfie       *PassportFile   `json:"selfie,omitempty"`
+	Translations *[]PassportFile `json:"translations,omitempty"`
+	Hash         string          `json:"hash"`
+}
+
+type EncryptedCredentials struct {
+	Data   string `json:"data"`
+	Hash   string `json:"hash"`
+	Secret string `json:"secret"`
+}
+
+type PassportElementError interface {
+	GetPassportElementErrorSource() string
+}
+
+type PassportElementErrorDataField struct {
+	Source    string `json:"source"`
+	Type      string `json:"type"`
+	FieldName string `json:"field_name"`
+	DataHash  string `json:"data_hash"`
+	Message   string `json:"message"`
+}
+
+func (p PassportElementErrorDataField) GetPassportElementErrorSource() string {
+	return "data"
+}
+
+type PassportElementErrorFrontSide struct {
+	Source   string `json:"source"`
+	Type     string `json:"type"`
+	FileHash string `json:"file_hash"`
+	Message  string `json:"message"`
+}
+
+func (p PassportElementErrorFrontSide) GetPassportElementErrorSource() string {
+	return "front_side"
+}
+
+type PassportElementErrorReverseSide struct {
+	Source   string `json:"source"`
+	Type     string `json:"type"`
+	FileHash string `json:"file_hash"`
+	Message  string `json:"message"`
+}
+
+func (p PassportElementErrorReverseSide) GetPassportElementErrorSource() string {
+	return "reverse_side"
+}
+
+type PassportElementErrorSelfie struct {
+	Source   string `json:"source"`
+	Type     string `json:"type"`
+	FileHash string `json:"file_hash"`
+	Message  string `json:"message"`
+}
+
+func (p PassportElementErrorSelfie) GetPassportElementErrorSource() string {
+	return "selfie"
+}
+
+type PassportElementErrorFile struct {
+	Source   string `json:"source"`
+	Type     string `json:"type"`
+	FileHash string `json:"file_hash"`
+	Message  string `json:"message"`
+}
+
+func (p PassportElementErrorFile) GetPassportElementErrorSource() string {
+	return "file"
+}
+
+type PassportElementErrorFiles struct {
+	Source     string   `json:"source"`
+	Type       string   `json:"type"`
+	FileHashes []string `json:"file_hashes"`
+	Message    string   `json:"message"`
+}
+
+func (p PassportElementErrorFiles) GetPassportElementErrorSource() string {
+	return "files"
+}
+
+type PassportElementErrorTranslationFile struct {
+	Source   string `json:"source"`
+	Type     string `json:"type"`
+	FileHash string `json:"file_hash"`
+	Message  string `json:"message"`
+}
+
+func (p PassportElementErrorTranslationFile) GetPassportElementErrorSource() string {
+	return "translation_file"
+}
+
+type PassportElementErrorTranslationFiles struct {
+	Source     string   `json:"source"`
+	Type       string   `json:"type"`
+	FileHashes []string `json:"file_hashes"`
+	Message    string   `json:"message"`
+}
+
+func (p PassportElementErrorTranslationFiles) GetPassportElementErrorSource() string {
+	return "translation_files"
+}
+
+type PassportElementErrorUnspecified struct {
+	Source      string `json:"source"`
+	Type        string `json:"type"`
+	ElementHash string `json:"element_hash"`
+	Message     string `json:"message"`
+}
+
+func (p PassportElementErrorUnspecified) GetPassportElementErrorSource() string {
+	return "unspecified"
+}
