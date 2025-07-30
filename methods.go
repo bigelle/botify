@@ -10,42 +10,31 @@ import (
 )
 
 type APIMethod interface {
-	ContentType() string
 	APIEndpoint() string
-	Payload() (io.Reader, error)
+	Payload() (body io.Reader, contentType string, err error)
 }
 
-type contentTyperJSON struct{}
-
-func (c contentTyperJSON) ContentType() string {
-	return "application/json"
-}
-
-func jsonPayload(obj any) (io.Reader, error) {
+func jsonPayload(obj any) (io.Reader, string, error) {
 	buf := bytes.NewBuffer(make([]byte, 0, 512))
 	enc := json.NewEncoder(buf)
 	enc.SetEscapeHTML(false)
 
 	if err := enc.Encode(obj); err != nil {
-		return nil, fmt.Errorf("encoding JSON payload: %w", err)
+		return nil, "", fmt.Errorf("encoding JSON payload: %w", err)
 	}
-	return buf, nil
+	return buf, "application/json", nil
 }
 
 // methodWithNoParams is used to send a request that requires no parameters,
 // meaning there is no request body and it does not require Content-Type header.
 type methodWithNoParams string
 
-func (m methodWithNoParams) ContentType() string {
-	return ""
-}
-
 func (m methodWithNoParams) APIEndpoint() string {
 	return string(m)
 }
 
-func (m methodWithNoParams) Payload() (io.Reader, error) {
-	return nil, nil
+func (m methodWithNoParams) Payload() (io.Reader, string, error) {
+	return nil, "", nil
 }
 
 const (
@@ -58,14 +47,13 @@ type GetUpdates struct {
 	Limit          int       `json:"limit,omitempty"`
 	Timeout        int       `json:"timeout,omitempty"`
 	AllowedUpdates *[]string `json:"allowed_updates,omitempty"`
-	contentTyperJSON
 }
 
 func (m *GetUpdates) APIEndpoint() string {
 	return "getUpdates"
 }
 
-func (m *GetUpdates) Payload() (io.Reader, error) {
+func (m *GetUpdates) Payload() (io.Reader, string, error) {
 	return jsonPayload(m)
 }
 
@@ -77,25 +65,18 @@ type SetWebhook struct {
 	AllowedUpdates     *[]string `json:"allowed_updates,omitempty"`
 	DropPendingUpdates bool      `json:"drop_pending_updates,omitempty"`
 	SecretToken        string    `json:"secret_token,omitempty"`
-
-	ct string
-}
-
-func (m *SetWebhook) ContentType() string {
-	return m.ct
 }
 
 func (m *SetWebhook) APIEndpoint() string {
 	return "setWebhook"
 }
 
-func (m *SetWebhook) Payload() (io.Reader, error) {
+func (m *SetWebhook) Payload() (io.Reader, string, error) {
 	if _, ok := m.Certificate.(InputFileRemote); ok {
-		return nil, fmt.Errorf("can't upload a certificate from a remote source; use a local file")
+		return nil, "", fmt.Errorf("can't upload a certificate from a remote source; use a local file")
 	}
 	if m.Certificate == nil {
 		// then there's no need to send multipart
-		m.ct = "application/json"
 		return jsonPayload(m)
 	}
 
@@ -110,8 +91,7 @@ func (m *SetWebhook) Payload() (io.Reader, error) {
 		WriteBool("drop_pending_updates", m.DropPendingUpdates).
 		WriteString("secret_token", m.SecretToken)
 
-	m.ct = mw.FormDataContentType()
-	return buf, mw.Close()
+	return buf, mw.FormDataContentType(), mw.Close()
 }
 
 // FIXME: commented fields
@@ -160,15 +140,13 @@ type SendMessage struct {
 	// Additional interface options. A JSON-serialized object for an inline keyboard,
 	// custom reply keyboard, instructions to remove a reply keyboard or to force a reply from the user
 	// ReplyMarkup *ReplyMarkup `json:"reply_markup,omitempty,"`
-
-	contentTyperJSON
 }
 
 func (m *SendMessage) Method() string {
 	return "sendMessage"
 }
 
-func (m *SendMessage) Payload() (io.Reader, error) {
+func (m *SendMessage) Payload() (io.Reader, string, error) {
 	return jsonPayload(m)
 }
 
@@ -177,20 +155,14 @@ type SendPhoto struct {
 	Photo  InputFile `json:"photo"`
 	// TODO: other fields
 
-	ct string
-}
-
-func (m *SendPhoto) ContentType() string {
-	return m.ct
 }
 
 func (m *SendPhoto) Method() string {
 	return "sendPhoto"
 }
 
-func (m *SendPhoto) Payload() (io.Reader, error) {
+func (m *SendPhoto) Payload() (io.Reader, string, error) {
 	if _, ok := m.Photo.(InputFileRemote); ok {
-		m.ct = "application/json"
 		return jsonPayload(m)
 	}
 
@@ -200,21 +172,19 @@ func (m *SendPhoto) Payload() (io.Reader, error) {
 		WriteFile("photo", photo.Name, photo.Data).
 		WriteString("chat_id", m.ChatID)
 
-	m.ct = mw.FormDataContentType()
-	return buf, mw.Close()
+	return buf, mw.FormDataContentType(), mw.Close()
 }
 
 type GetMyCommands struct {
 	Scope        BotCommandScope `json:"scope,omitempty"`
 	LanguageCode string          `json:"language_code,omitempty"`
-	contentTyperJSON
 }
 
 func (m *GetMyCommands) APIEndpoint() string {
 	return "getMyCommands"
 }
 
-func (m *GetMyCommands) Payload() (io.Reader, error) {
+func (m *GetMyCommands) Payload() (io.Reader, string, error) {
 	return jsonPayload(m)
 }
 
@@ -222,13 +192,12 @@ type SetMyCommands struct {
 	Commands     []BotCommand    `json:"commands"`
 	Scope        BotCommandScope `json:"scope,omitempty"`
 	LanguageCode string          `json:"language_code,omitempty"`
-	contentTyperJSON
 }
 
 func (m *SetMyCommands) APIEndpoint() string {
 	return "setMyCommands"
 }
 
-func (m *SetMyCommands) Payload() (io.Reader, error) {
+func (m *SetMyCommands) Payload() (io.Reader, string, error) {
 	return jsonPayload(m)
 }

@@ -171,7 +171,8 @@ func (c *Context) SendJSON(endpoint string, obj any) (*APIResponse, error) {
 // to send a request with payload, content-type and to the API endpoint, defined in obj,
 // and can be cancelled with ctx
 func (c *Context) SendRequestContext(ctx context.Context, obj APIMethod) (*APIResponse, error) {
-	ct, _, _ := strings.Cut(obj.ContentType(), ";")
+	_, ct, _ := obj.Payload()
+	ct, _, _ = strings.Cut(ct, ";")
 	return c.doRequest(ctx, obj.APIEndpoint(), ct, func(ctx context.Context) (*APIResponse, error) {
 		return c.bot.Sender.SendWithContext(ctx, obj)
 	})

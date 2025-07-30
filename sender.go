@@ -157,7 +157,7 @@ func (s *TGBotAPIRequestSender) Send(obj APIMethod) (apiResp *APIResponse, err e
 }
 
 // SendWithContext satisfies RequestSender interface.
-// 
+//
 // If the request fails and if the response parameters contains a "retry_after" field,
 // it will try to send the request one more time after n seconds, where n is the value of the "retry_after" field
 func (s *TGBotAPIRequestSender) SendWithContext(ctx context.Context, obj APIMethod) (apiResp *APIResponse, err error) {
@@ -165,17 +165,20 @@ func (s *TGBotAPIRequestSender) SendWithContext(ctx context.Context, obj APIMeth
 		return nil, fmt.Errorf("obj can't be empty")
 	}
 
-	var payload io.Reader
-	payload, err = obj.Payload()
+	var (
+		payload io.Reader
+		ct      string
+	)
+	payload, ct, err = obj.Payload()
 	if err != nil {
 		return nil, fmt.Errorf("forming request payload: %w", err)
 	}
-	return s.send(ctx, obj.APIEndpoint(), payload, obj.ContentType())
+	return s.send(ctx, obj.APIEndpoint(), payload, ct)
 }
 
 // SendJSON satisfies RequestSender interface
 // It's a wrapper for [SendJSONWithContext] that uses [context.Background] as ctx.
-// 
+//
 // If the request fails and if the response parameters contains a "retry_after" field,
 // it will try to send the request one more time after n seconds, where n is the value of the "retry_after" field
 func (s *TGBotAPIRequestSender) SendJSON(method string, obj any) (apiResp *APIResponse, err error) {
@@ -183,7 +186,7 @@ func (s *TGBotAPIRequestSender) SendJSON(method string, obj any) (apiResp *APIRe
 }
 
 // SendJSONWithContext satisfies RequestSender interface
-// 
+//
 // If the request fails and if the response parameters contains a "retry_after" field,
 // it will try to send the request one more time after n seconds, where n is the value of the "retry_after" field
 func (s *TGBotAPIRequestSender) SendJSONWithContext(ctx context.Context, method string, obj any) (apiResp *APIResponse, err error) {
