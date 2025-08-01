@@ -2,9 +2,6 @@ package botify
 
 import (
 	"context"
-	"slices"
-	"strings"
-	"time"
 )
 
 const (
@@ -112,7 +109,6 @@ func (u *Update) UpdateType() string {
 }
 
 // HandlerFunc is a function used to handle incoming updates.
-// The return value is used for logging and testing purposes only
 type HandlerFunc func(ctx *Context) error
 
 func ChainHandlers(handlers ...HandlerFunc) HandlerFunc {
@@ -129,25 +125,13 @@ func ChainHandlers(handlers ...HandlerFunc) HandlerFunc {
 // Context is a "bridge",
 // which allows to use bot settings such as logger or [RequestSender]
 // right from the handler, without the need to store a pointer to the bot's instance.
-// It also collects the information about the update and the requests that was sent by handler using Context,
-// which is useful for logging and debugging
 type Context struct {
 	bot *Bot
 
 	updType        string
 	upd            *Update
-	sendedRequests []RequestInfo // for logging
 
 	ctx context.Context
-}
-
-// RequestInfo contains the information about sended request,
-// including API method name, content-type and it's duration,
-// including request body serialization, network latencies and response body deserialization
-type RequestInfo struct {
-	Method      string
-	ContentType string
-	Duration    time.Duration
 }
 
 // Bot returns a read-only copy of the [Bot] that created this context
@@ -158,57 +142,31 @@ func (c *Context) Bot() Bot {
 // SendRequest is a wrapper around [SendRequestContext],
 // which is using the inner [context.Context] as ctx
 func (c *Context) SendRequest(obj APIMethod) (*APIResponse, error) {
-	return c.SendRequestContext(c.ctx, obj)
+	return c.SendRequestContext(c.Context(), obj)
 }
 
 // SendJSON is a wrapper around [SendJSONContext],
 // which is using the inner [context.Context] as ctx
 func (c *Context) SendJSON(endpoint string, obj any) (*APIResponse, error) {
-	return c.SendJSONContext(c.ctx, endpoint, obj)
+	return c.SendJSONContext(c.Context(), endpoint, obj)
 }
 
 // SendRequestContext is using bot's [RequestSender]
 // to send a request with payload, content-type and to the API endpoint, defined in obj,
 // and can be cancelled with ctx
 func (c *Context) SendRequestContext(ctx context.Context, obj APIMethod) (*APIResponse, error) {
-	_, ct, _ := obj.Payload()
-	ct, _, _ = strings.Cut(ct, ";")
-	return c.doRequest(ctx, obj.APIEndpoint(), ct, func(ctx context.Context) (*APIResponse, error) {
-		return c.bot.Sender.SendWithContext(ctx, obj)
-	})
+	return c.bot.Sender.SendWithContext(ctx, obj)
 }
 
 // SendJSONContext is using bot's [RequestSender]
 // to send obj as JSON to the endpoint,
 // and can be cancelled with ctx
 func (c *Context) SendJSONContext(ctx context.Context, endpoint string, obj any) (*APIResponse, error) {
-	return c.doRequest(ctx, endpoint, "application/json", func(ctx context.Context) (*APIResponse, error) {
-		return c.bot.Sender.SendJSONWithContext(ctx, endpoint, obj)
-	})
-}
-
-func (c *Context) doRequest(
-	ctx context.Context,
-	method string,
-	contentType string,
-	sendFn func(context.Context) (*APIResponse, error),
-) (*APIResponse, error) {
-	start := time.Now()
-	resp, err := sendFn(ctx)
-	end := time.Since(start)
-
-	c.sendedRequests = slices.Grow(c.sendedRequests, 1)
-	c.sendedRequests = append(c.sendedRequests, RequestInfo{
-		Method:      method,
-		ContentType: contentType,
-		Duration:    end,
-	})
-
-	return resp, err
+	return c.bot.Sender.SendJSONWithContext(ctx, endpoint, obj)
 }
 
 // UpdateType returns update type.
-// Useful for logging or to make sure that the type is what was expected.
+// Useful to make sure that the type is what was expected.
 // See [Update] for a complete list of available update types
 //
 // [Update]: https://core.telegram.org/bots/api#update
@@ -217,17 +175,8 @@ func (c *Context) UpdateType() string {
 }
 
 // UpdateID returns update ID.
-// Useful for logging
 func (c *Context) UpdateID() int {
 	return c.upd.UpdateID
-}
-
-// SendedRequests returns a slice of [RequestInfo],
-// which contains API method name, Content-Type and it's duration,
-// including request body serialization, network latencies and response body deserialization.
-// Useful for logging
-func (c *Context) SendedRequests() []RequestInfo {
-	return c.sendedRequests
 }
 
 // Context returns [context.Context],

@@ -397,7 +397,6 @@ func (b *Bot) work() {
 				bot:            b,
 				updType:        upd.UpdateType(),
 				upd:            &upd,
-				sendedRequests: make([]RequestInfo, 0, 1),
 				ctx:            b.ctx,
 			}
 
@@ -422,10 +421,6 @@ func (b *Bot) useHandler(handler HandlerFunc, ctx *Context) {
 	start := time.Now()
 	err := handler(ctx)
 	end := time.Since(start)
-
-	for _, req := range ctx.sendedRequests {
-		end = end - req.Duration
-	}
 
 	if err != nil {
 		b.Logger.Error(err, "error handling update", "type", ctx.UpdateType(), "ID", ctx.UpdateID())

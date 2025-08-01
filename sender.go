@@ -165,15 +165,15 @@ func (s *TGBotAPIRequestSender) SendWithContext(ctx context.Context, obj APIMeth
 		return nil, fmt.Errorf("obj can't be empty")
 	}
 
-	var (
-		payload io.Reader
-		ct      string
-	)
-	payload, ct, err = obj.Payload()
+	buf := reused.Buf()
+	defer reused.PutBuf(buf)
+
+	var ct string
+	ct, err = obj.Payload(buf)
 	if err != nil {
 		return nil, fmt.Errorf("forming request payload: %w", err)
 	}
-	return s.send(ctx, obj.APIEndpoint(), payload, ct)
+	return s.send(ctx, obj.APIEndpoint(), buf, ct)
 }
 
 // SendJSON satisfies RequestSender interface

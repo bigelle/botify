@@ -1,7 +1,6 @@
 package botify
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -11,18 +10,17 @@ import (
 
 type APIMethod interface {
 	APIEndpoint() string
-	Payload() (body io.Reader, contentType string, err error)
+	Payload(body io.Writer) (contentType string, err error)
 }
 
-func jsonPayload(obj any) (io.Reader, string, error) {
-	buf := bytes.NewBuffer(make([]byte, 0, 512))
-	enc := json.NewEncoder(buf)
+func jsonPayload(obj any, body io.Writer) (string, error) {
+	enc := json.NewEncoder(body)
 	enc.SetEscapeHTML(false)
 
 	if err := enc.Encode(obj); err != nil {
-		return nil, "", fmt.Errorf("encoding JSON payload: %w", err)
+		return "", fmt.Errorf("encoding JSON payload: %w", err)
 	}
-	return buf, "application/json", nil
+	return "application/json", nil
 }
 
 // methodWithNoParams is used to send a request that requires no parameters,
@@ -33,8 +31,8 @@ func (m methodWithNoParams) APIEndpoint() string {
 	return string(m)
 }
 
-func (m methodWithNoParams) Payload() (io.Reader, string, error) {
-	return nil, "", nil
+func (m methodWithNoParams) Payload(_ io.Writer) (string, error) {
+	return "", nil
 }
 
 const (
@@ -53,8 +51,8 @@ func (m *GetUpdates) APIEndpoint() string {
 	return "getUpdates"
 }
 
-func (m *GetUpdates) Payload() (io.Reader, string, error) {
-	return jsonPayload(m)
+func (m *GetUpdates) Payload(body io.Writer) (string, error) {
+	return jsonPayload(m, body)
 }
 
 type SetWebhook struct {
@@ -71,18 +69,17 @@ func (m *SetWebhook) APIEndpoint() string {
 	return "setWebhook"
 }
 
-func (m *SetWebhook) Payload() (io.Reader, string, error) {
+func (m *SetWebhook) Payload(body io.Writer) (string, error) {
 	if _, ok := m.Certificate.(InputFileRemote); ok {
-		return nil, "", fmt.Errorf("can't upload a certificate from a remote source; use a local file")
+		return "", fmt.Errorf("can't upload a certificate from a remote source; use a local file")
 	}
 	if m.Certificate == nil {
 		// then there's no need to send multipart
-		return jsonPayload(m)
+		return jsonPayload(m, body)
 	}
 
 	cert := m.Certificate.(InputFileLocal)
-	buf := bytes.NewBuffer(make([]byte, 0, 4*1024))
-	mw := formy.NewWriter(buf).
+	mw := formy.NewWriter(body).
 		WriteString("url", m.URL).
 		WriteFile("certificate", cert.Name, cert.Data).
 		WriteString("ip_address", m.IPAddress).
@@ -91,7 +88,7 @@ func (m *SetWebhook) Payload() (io.Reader, string, error) {
 		WriteBool("drop_pending_updates", m.DropPendingUpdates).
 		WriteString("secret_token", m.SecretToken)
 
-	return buf, mw.FormDataContentType(), mw.Close()
+	return mw.FormDataContentType(), mw.Close()
 }
 
 // FIXME: commented fields
@@ -146,33 +143,31 @@ func (m *SendMessage) Method() string {
 	return "sendMessage"
 }
 
-func (m *SendMessage) Payload() (io.Reader, string, error) {
-	return jsonPayload(m)
+func (m *SendMessage) Payload(body io.Writer) (string, error) {
+	return jsonPayload(m, body)
 }
 
 type SendPhoto struct {
 	ChatID string    `json:"chat_id"`
 	Photo  InputFile `json:"photo"`
 	// TODO: other fields
-
 }
 
 func (m *SendPhoto) Method() string {
 	return "sendPhoto"
 }
 
-func (m *SendPhoto) Payload() (io.Reader, string, error) {
+func (m *SendPhoto) Payload(body io.Writer) (string, error) {
 	if _, ok := m.Photo.(InputFileRemote); ok {
-		return jsonPayload(m)
+		return jsonPayload(m, body)
 	}
 
 	photo := m.Photo.(InputFileLocal)
-	buf := bytes.NewBuffer(make([]byte, 0, 4*1024))
-	mw := formy.NewWriter(buf).
+	mw := formy.NewWriter(body).
 		WriteFile("photo", photo.Name, photo.Data).
 		WriteString("chat_id", m.ChatID)
 
-	return buf, mw.FormDataContentType(), mw.Close()
+	return mw.FormDataContentType(), mw.Close()
 }
 
 type GetMyCommands struct {
@@ -184,8 +179,8 @@ func (m *GetMyCommands) APIEndpoint() string {
 	return "getMyCommands"
 }
 
-func (m *GetMyCommands) Payload() (io.Reader, string, error) {
-	return jsonPayload(m)
+func (m *GetMyCommands) Payload(body io.Writer) (string, error) {
+	return jsonPayload(m, body)
 }
 
 type SetMyCommands struct {
@@ -198,6 +193,6 @@ func (m *SetMyCommands) APIEndpoint() string {
 	return "setMyCommands"
 }
 
-func (m *SetMyCommands) Payload() (io.Reader, string, error) {
-	return jsonPayload(m)
+func (m *SetMyCommands) Payload(body io.Writer) (string, error) {
+	return jsonPayload(m, body)
 }
