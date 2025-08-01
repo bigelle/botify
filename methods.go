@@ -48,10 +48,10 @@ const (
 )
 
 type GetUpdates struct {
-	Offset         int       `json:"offset,omitempty"`
-	Limit          int       `json:"limit,omitempty"`
-	Timeout        int       `json:"timeout,omitempty"`
-	AllowedUpdates *[]string `json:"allowed_updates,omitempty"`
+	Offset         int      `json:"offset,omitempty"`
+	Limit          int      `json:"limit,omitempty"`
+	Timeout        int      `json:"timeout,omitempty"`
+	AllowedUpdates []string `json:"allowed_updates,omitzero"`
 }
 
 func (m *GetUpdates) APIEndpoint() string {
@@ -67,7 +67,7 @@ type SetWebhook struct {
 	Certificate        InputFile `json:"certificate,omitempty"`
 	IPAddress          string    `json:"ip_address,omitempty"`
 	MaxConnections     int       `json:"max_connections,omitempty"`
-	AllowedUpdates     *[]string `json:"allowed_updates,omitempty"`
+	AllowedUpdates     []string  `json:"allowed_updates,omitzero"`
 	DropPendingUpdates bool      `json:"drop_pending_updates,omitempty"`
 	SecretToken        string    `json:"secret_token,omitempty"`
 }
@@ -113,14 +113,14 @@ func (m *DeleteWebhook) WritePayload(w io.Writer) (string, error) {
 type SendMessage struct {
 	ChatId               string           `json:"chat_id"`
 	Text                 string           `json:"text"`
-	BusinessConnectionId string          `json:"business_connection_id,omitempty"`
-	MessageThreadId      int             `json:"message_thread_id,omitempty"`
-	ParseMode            string          `json:"parse_mode,omitempty"`
+	BusinessConnectionId string           `json:"business_connection_id,omitempty"`
+	MessageThreadId      int              `json:"message_thread_id,omitempty"`
+	ParseMode            string           `json:"parse_mode,omitempty"`
 	Entities             *MessageEntity   `json:"entities,omitempty"`
-	DisableNotification  bool            `json:"disable_notification,omitempty"`
-	ProtectContent       bool            `json:"protect_content,omitempty"`
-	AllowPaidBroadcast   bool            `json:"allow_paid_broadcast,omitempty"`
-	MessageEffectId      string          `json:"message_effect_id,omitempty"`
+	DisableNotification  bool             `json:"disable_notification,omitempty"`
+	ProtectContent       bool             `json:"protect_content,omitempty"`
+	AllowPaidBroadcast   bool             `json:"allow_paid_broadcast,omitempty"`
+	MessageEffectId      string           `json:"message_effect_id,omitempty"`
 	ReplyParameters      *ReplyParameters `json:"reply_parameters,omitempty"`
 	ReplyMarkup          *ReplyMarkup     `json:"reply_markup,omitempty"`
 }

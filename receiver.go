@@ -68,7 +68,7 @@ func (lp *LongPolling) ReceiveUpdates(ctx context.Context, chUpdate chan<- Updat
 				Offset:         lp.Offset,
 				Limit:          lp.Limit,
 				Timeout:        lp.Timeout,
-				AllowedUpdates: &allowedUpdates,
+				AllowedUpdates: allowedUpdates,
 			}
 
 			resp, err = lp.bot.Sender.SendWithContext(ctx, &get)
@@ -213,7 +213,7 @@ func (ws *Webhook) SetWebhook(ctx context.Context, allowedUpdates []string) erro
 		Certificate:        ws.Certificate,
 		IPAddress:          ws.IPAddress,
 		MaxConnections:     ws.MaxConnections,
-		AllowedUpdates:     &allowedUpdates,
+		AllowedUpdates:     allowedUpdates,
 		DropPendingUpdates: ws.DropPendingUpdates,
 		SecretToken:        ws.SecretToken,
 	}

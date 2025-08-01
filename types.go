@@ -742,11 +742,9 @@ type WebAppInfo struct {
 	Url string `json:"url"`
 }
 
-type ReplyMarkup struct {
-	ReplyMarkupInterface
-}
-
-type ReplyMarkupInterface interface {
+// ReplyMarkup is basically a union type for
+// [InlineKeyboardMarkup], [ReplyKeyboardMarkup], [ReplyKeyboardRemove] and [ForceReply]
+type ReplyMarkup interface {
 	replyKeyboardContract()
 }
 
