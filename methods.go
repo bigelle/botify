@@ -10,7 +10,7 @@ import (
 
 type APIMethod interface {
 	APIEndpoint() string
-	Payload(body io.Writer) (contentType string, err error)
+	WritePayload(body io.Writer) (contentType string, err error)
 }
 
 func jsonPayload(obj any, body io.Writer) (string, error) {
@@ -31,7 +31,7 @@ func (m methodWithNoParams) APIEndpoint() string {
 	return string(m)
 }
 
-func (m methodWithNoParams) Payload(_ io.Writer) (string, error) {
+func (m methodWithNoParams) WritePayload(_ io.Writer) (string, error) {
 	return "", nil
 }
 
@@ -51,7 +51,7 @@ func (m *GetUpdates) APIEndpoint() string {
 	return "getUpdates"
 }
 
-func (m *GetUpdates) Payload(body io.Writer) (string, error) {
+func (m *GetUpdates) WritePayload(body io.Writer) (string, error) {
 	return jsonPayload(m, body)
 }
 
@@ -69,7 +69,7 @@ func (m *SetWebhook) APIEndpoint() string {
 	return "setWebhook"
 }
 
-func (m *SetWebhook) Payload(body io.Writer) (string, error) {
+func (m *SetWebhook) WritePayload(body io.Writer) (string, error) {
 	if _, ok := m.Certificate.(InputFileRemote); ok {
 		return "", fmt.Errorf("can't upload a certificate from a remote source; use a local file")
 	}
@@ -179,7 +179,7 @@ func (m *GetMyCommands) APIEndpoint() string {
 	return "getMyCommands"
 }
 
-func (m *GetMyCommands) Payload(body io.Writer) (string, error) {
+func (m *GetMyCommands) WritePayload(body io.Writer) (string, error) {
 	return jsonPayload(m, body)
 }
 
@@ -193,6 +193,6 @@ func (m *SetMyCommands) APIEndpoint() string {
 	return "setMyCommands"
 }
 
-func (m *SetMyCommands) Payload(body io.Writer) (string, error) {
+func (m *SetMyCommands) WritePayload(body io.Writer) (string, error) {
 	return jsonPayload(m, body)
 }

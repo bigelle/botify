@@ -169,7 +169,7 @@ func (s *TGBotAPIRequestSender) SendWithContext(ctx context.Context, obj APIMeth
 	defer reused.PutBuf(buf)
 
 	var ct string
-	ct, err = obj.Payload(buf)
+	ct, err = obj.WritePayload(buf)
 	if err != nil {
 		return nil, fmt.Errorf("forming request payload: %w", err)
 	}

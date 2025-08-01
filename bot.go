@@ -394,10 +394,10 @@ func (b *Bot) work() {
 
 		case upd := <-b.chUpdate:
 			ctx = Context{
-				bot:            b,
-				updType:        upd.UpdateType(),
-				upd:            &upd,
-				ctx:            b.ctx,
+				bot:     b,
+				updType: upd.UpdateType(),
+				upd:     &upd,
+				ctx:     b.ctx,
 			}
 
 			if ctx.UpdateType() == UpdateTypeMessage && upd.Message.IsCommand() {
