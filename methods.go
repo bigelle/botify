@@ -8,8 +8,15 @@ import (
 	"github.com/bigelle/formy"
 )
 
+// APIMethod describes how the request would be written
+// and which API method it belongs to
 type APIMethod interface {
+	// APIEndpoint returns API method name.
+	// E.g. for sendMessage it should return "sendMessage",
+	// without the leading or trailing "/", case insensitive
 	APIEndpoint() string
+	// WritePayload writes the struct into body, which would be used while sending the request.
+	// It must return a valid "Content-Type" header value and any write errors
 	WritePayload(body io.Writer) (contentType string, err error)
 }
 
@@ -91,52 +98,31 @@ func (m *SetWebhook) WritePayload(body io.Writer) (string, error) {
 	return mw.FormDataContentType(), mw.Close()
 }
 
-// FIXME: commented fields
+type DeleteWebhook struct {
+	DropPendingUpdates bool `json:"drop_pending_updates,omitempty"`
+}
 
-// Use this method to send text messages.
-// On success, the sent [Message] is returned.
+func (m *DeleteWebhook) APIEndpoint() string {
+	return "deleteWebhook"
+}
+
+func (m *DeleteWebhook) WritePayload(w io.Writer) (string, error) {
+	return jsonPayload(m, w)
+}
+
 type SendMessage struct {
-	// REQUIRED:
-	// Unique identifier for the target chat or username of the target channel (in the format @channelusername)
-	ChatId string `json:"chat_id"`
-	// REQUIRED:
-	// Text of the message to be sent, 1-4096 characters after entities parsing
-	Text string `json:"text"`
-
-	// Unique identifier of the business connection on behalf of which the message will be sent
-	BusinessConnectionId *string `json:"business_connection_id,omitempty,"`
-
-	// Unique identifier for the target message thread (topic) of the forum; for forum supergroups only
-	MessageThreadId *int `json:"message_thread_id,omitempty,"`
-
-	// Mode for parsing entities in the message text.
-	// See https://core.telegram.org/bots/api#formatting-options for more details.
-	ParseMode *string `json:"parse_mode,omitempty,"`
-
-	// A JSON-serialized list of special entities that appear in message text, which can be specified instead of parse_mode
-	Entities *MessageEntity `json:"entities,omitempty,"`
-
-	// Link preview generation options for the message
-	// LinkPreviewOptions *LinkPreviewOptions `json:"link_preview_options,omitempty,"`
-	// Sends the message silently. Users will receive a notification with no sound.
-	DisableNotification *bool `json:"disable_notification,omitempty,"`
-
-	// Protects the contents of the sent message from forwarding and saving
-	ProtectContent *bool `json:"protect_content,omitempty,"`
-
-	// Pass True to allow up to 1000 messages per second, ignoring broadcasting limits for a fee of 0.1 Telegram Stars per message.
-	// The relevant Stars will be withdrawn from the bot's balance
-	AllowPaidBroadcast *bool `json:"allow_paid_broadcast,omitempty"`
-
-	// Unique identifier of the message effect to be added to the message; for private chats only
-	MessageEffectId *string `json:"message_effect_id,omitempty,"`
-
-	// Description of the message to reply to
-	// ReplyParameters *ReplyParameters `json:"reply_parameters,omitempty,"`
-
-	// Additional interface options. A JSON-serialized object for an inline keyboard,
-	// custom reply keyboard, instructions to remove a reply keyboard or to force a reply from the user
-	// ReplyMarkup *ReplyMarkup `json:"reply_markup,omitempty,"`
+	ChatId               string           `json:"chat_id"`
+	Text                 string           `json:"text"`
+	BusinessConnectionId string          `json:"business_connection_id,omitempty"`
+	MessageThreadId      int             `json:"message_thread_id,omitempty"`
+	ParseMode            string          `json:"parse_mode,omitempty"`
+	Entities             *MessageEntity   `json:"entities,omitempty"`
+	DisableNotification  bool            `json:"disable_notification,omitempty"`
+	ProtectContent       bool            `json:"protect_content,omitempty"`
+	AllowPaidBroadcast   bool            `json:"allow_paid_broadcast,omitempty"`
+	MessageEffectId      string          `json:"message_effect_id,omitempty"`
+	ReplyParameters      *ReplyParameters `json:"reply_parameters,omitempty"`
+	ReplyMarkup          *ReplyMarkup     `json:"reply_markup,omitempty"`
 }
 
 func (m *SendMessage) Method() string {
