@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 
+	"github.com/bigelle/botify/internal/reused"
 	"github.com/bigelle/formy"
 )
 
@@ -60,7 +61,7 @@ const (
 
 type GetUpdates struct {
 	Offset         int      `json:"offset,omitempty"`
-	Limit          int      `json:"limit,omitempty"`
+	Limit          int      `json:"limit,omitempty" validate:"min=1,max=100"`
 	Timeout        int      `json:"timeout,omitempty"`
 	AllowedUpdates []string `json:"allowed_updates,omitzero"`
 }
@@ -70,17 +71,20 @@ func (m GetUpdates) APIEndpoint() string {
 }
 
 func (m GetUpdates) WritePayload(body io.Writer) (string, error) {
+	if err := reused.Validator().Struct(m); err != nil {
+		return "", err
+	}
 	return jsonPayload(m, body)
 }
 
 type SetWebhook struct {
-	URL                string    `json:"url"`
+	URL                string    `json:"url" validate:"url"`
 	Certificate        InputFile `json:"certificate,omitempty"`
-	IPAddress          string    `json:"ip_address,omitempty"`
-	MaxConnections     int       `json:"max_connections,omitempty"`
+	IPAddress          string    `json:"ip_address,omitempty" validate:"ip"`
+	MaxConnections     int       `json:"max_connections,omitempty" validate:"min=1,max=100"`
 	AllowedUpdates     []string  `json:"allowed_updates,omitempty"`
 	DropPendingUpdates bool      `json:"drop_pending_updates,omitempty"`
-	SecretToken        string    `json:"secret_token,omitempty"`
+	SecretToken        string    `json:"secret_token,omitempty" validate:"min=1,max=100,regexp=^[a-zA-Z0-9_-]+$"`
 }
 
 func (m SetWebhook) APIEndpoint() string {
@@ -126,8 +130,8 @@ func (m DeleteWebhook) WritePayload(w io.Writer) (string, error) {
 */
 
 type SendMessage struct {
-	ChatID               string           `json:"chat_id"`
-	Text                 string           `json:"text"`
+	ChatID               string           `json:"chat_id" validate:"required"`
+	Text                 string           `json:"text" validate:"required,min=1,max=4096"`
 	BusinessConnectionID string           `json:"business_connection_id,omitempty"`
 	MessageThreadID      int              `json:"message_thread_id,omitempty"`
 	ParseMode            string           `json:"parse_mode,omitempty"`
