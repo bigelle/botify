@@ -1,5 +1,7 @@
-github.com/bigelle/formy v0.0.0-20250730092833-1cffe1f3d7ef h1:aF+bzy2CWT0LusUsmMy5zGIDE8MOH5B0OMJkpucyVlk=
-github.com/bigelle/formy v0.0.0-20250730092833-1cffe1f3d7ef/go.mod h1:gDTk9qqbxs8fcR1bYYkcxDPoU2xZUHgAQym0KtoZbFI=
+github.com/bigelle/formy v0.0.0-20250802071457-880971a321fc h1:nd9c/2lXnoMEEdmrLEgXUDGDn85Ulh6TQHikTukKG5k=
+github.com/bigelle/formy v0.0.0-20250802071457-880971a321fc/go.mod h1:gDTk9qqbxs8fcR1bYYkcxDPoU2xZUHgAQym0KtoZbFI=
+github.com/bigelle/formy v0.0.0-20250802074513-757c96885dff h1:c8wDH4inQV3erXW6CluylicX5rgoVftEmibsyqWQRCc=
+github.com/bigelle/formy v0.0.0-20250802074513-757c96885dff/go.mod h1:gDTk9qqbxs8fcR1bYYkcxDPoU2xZUHgAQym0KtoZbFI=
 github.com/davecgh/go-spew v1.1.1 h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c=
 github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/gabriel-vasile/mimetype v1.4.9 h1:5k+WDwEsD9eTLL8Tz3L0VnmVh9QxGjRmjBvAG7U/oYY=

@@ -8,7 +8,7 @@ require (
 )
 
 require (
-	github.com/bigelle/formy v0.0.0-20250730092833-1cffe1f3d7ef
+	github.com/bigelle/formy v0.0.0-20250802074513-757c96885dff
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/gabriel-vasile/mimetype v1.4.9 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
