@@ -50,9 +50,9 @@ const (
 
 	// Available methods
 
-	GetMe          methodWithNoParams = "getMe"
-	LogOut         methodWithNoParams = "logOut"
-	Close          methodWithNoParams = "close"
+	GetMe  methodWithNoParams = "getMe"
+	LogOut methodWithNoParams = "logOut"
+	Close  methodWithNoParams = "close"
 )
 
 /*
@@ -276,6 +276,69 @@ func (m SendPhoto) WritePayload(body io.Writer) (string, error) {
 		WriteJSONCond("reply_markup", m.ReplyMarkup, func() bool { return m.ReplyMarkup != nil })
 
 	return mw.FormDataContentType(), mw.Close()
+}
+
+type SendAudio struct {
+	ChatID               string           `json:"chat_id"`
+	Audio                InputFile        `json:"audio"`
+	BusinessConnectionID string           `json:"business_connection_id,omitempty"`
+	MessageThreadID      int              `json:"message_thread_id,omitempty"`
+	Caption              string           `json:"caption,omitempty"`
+	ParseMode            string           `json:"parse_mode,omitempty"`
+	CaptionEntities      []MessageEntity  `json:"caption_entities,omitempty"`
+	Duration             int              `json:"duration,omitempty"`
+	Performer            string           `json:"performer,omitempty"`
+	Title                string           `json:"title,omitempty"`
+	Thumbnail            InputFile        `json:"thumbnail,omitempty"`
+	DisableNotification  bool             `json:"disable_notification,omitempty"`
+	ProtectContent       bool             `json:"protect_content,omitempty"`
+	MessageEffectID      string           `json:"message_effect_id,omitempty"`
+	ReplyParameters      *ReplyParameters `json:"reply_parameters,omitempty"`
+	ReplyMarkup          ReplyMarkup      `json:"reply_markup,omitempty"`
+}
+
+func (m SendAudio) WritePayload(body io.Writer) (string, error) {
+	audio, ok1 := m.Audio.(InputFileLocal)
+	thumbnail, ok2 := m.Thumbnail.(InputFileLocal)
+
+	if !(ok1 && ok2) {
+		return jsonPayload(m, body)
+	}
+
+	mw := formy.NewWriter(body).
+		WriteString("chat_id", m.ChatID).
+		WriteStringCond("business_connection_id", m.BusinessConnectionID, notEmptyString(m.BusinessConnectionID)).
+		WriteIntCond("message_thread_id", m.MessageThreadID, notEmptyInt(m.MessageThreadID)).
+		WriteStringCond("caption", m.Caption, notEmptyString(m.Caption)).
+		WriteStringCond("parse_mode", m.ParseMode, notEmptyString(m.ParseMode)).
+		WriteJSONCond("caption_entities", m.CaptionEntities, notEmptySlice(m.CaptionEntities)).
+		WriteIntCond("duration", m.Duration, notEmptyInt(m.Duration)).
+		WriteStringCond("performer", m.Performer, notEmptyString(m.Performer)).
+		WriteStringCond("title", m.Title, notEmptyString(m.Title)).
+		WriteBoolCond("disable_notification", m.DisableNotification, func() bool { return m.DisableNotification }).
+		WriteBoolCond("protect_content", m.ProtectContent, func() bool { return m.ProtectContent }).
+		WriteStringCond("message_effect_id", m.MessageEffectID, notEmptyString(m.MessageEffectID)).
+		WriteJSONCond("reply_markup", m.ReplyMarkup, func() bool { return m.ReplyMarkup != nil }).
+		WriteJSONCond("reply_parameters", m.ReplyParameters, func() bool { return m.ReplyParameters != nil })
+
+	if ok1 {
+		mw.WriteFile("audio", audio.Name, audio.Data)
+	} else {
+		rem := m.Audio.(InputFileRemote)
+		mw.WriteString("audio", string(rem))
+	}
+	if ok2 {
+		mw.WriteFile("thumbnail", thumbnail.Name, thumbnail.Data)
+	} else {
+		rem, ok := m.Thumbnail.(InputFileRemote)
+		mw.WriteStringCond("thumbnail", string(rem), func() bool { return ok })
+	}
+
+	return mw.FormDataContentType(), mw.Close()
+}
+
+func (m SendAudio) APIEndpoint() string {
+	return "sendAudio"
 }
 
 type GetMyCommands struct {
