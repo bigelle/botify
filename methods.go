@@ -21,7 +21,10 @@ type APIMethod interface {
 	WritePayload(body io.Writer) (contentType string, err error)
 }
 
-func jsonPayload(obj any, body io.Writer) (string, error) {
+func jsonPayload(obj APIMethod, body io.Writer) (string, error) {
+	if err := reused.Validator().Struct(obj); err != nil {
+		return "", fmt.Errorf("validating %s payload: %w", obj.APIEndpoint(), err)
+	}
 	enc := json.NewEncoder(body)
 	enc.SetEscapeHTML(false)
 
@@ -61,7 +64,7 @@ const (
 
 type GetUpdates struct {
 	Offset         int      `json:"offset,omitempty"`
-	Limit          int      `json:"limit,omitempty" validate:"min=1,max=100"`
+	Limit          int      `validate:"min=1,max=100" json:"limit,omitempty"`
 	Timeout        int      `json:"timeout,omitempty"`
 	AllowedUpdates []string `json:"allowed_updates,omitzero"`
 }
@@ -71,20 +74,17 @@ func (m GetUpdates) APIEndpoint() string {
 }
 
 func (m GetUpdates) WritePayload(body io.Writer) (string, error) {
-	if err := reused.Validator().Struct(m); err != nil {
-		return "", err
-	}
-	return jsonPayload(m, body)
+	return jsonPayload(&m, body)
 }
 
 type SetWebhook struct {
-	URL                string    `json:"url" validate:"url"`
+	URL                string    `validate:"url" json:"url"`
 	Certificate        InputFile `json:"certificate,omitempty"`
-	IPAddress          string    `json:"ip_address,omitempty" validate:"ip"`
-	MaxConnections     int       `json:"max_connections,omitempty" validate:"min=1,max=100"`
+	IPAddress          string    `validate:"ip" json:"ip_address,omitempty"`
+	MaxConnections     int       `validate:"min=1,max=100" json:"max_connections,omitempty"`
 	AllowedUpdates     []string  `json:"allowed_updates,omitempty"`
 	DropPendingUpdates bool      `json:"drop_pending_updates,omitempty"`
-	SecretToken        string    `json:"secret_token,omitempty" validate:"min=1,max=100,regexp=^[a-zA-Z0-9_-]+$"`
+	SecretToken        string    `validate:"min=1,max=100,regexp=^[a-zA-Z0-9_-]+$" json:"secret_token,omitempty"`
 }
 
 func (m SetWebhook) APIEndpoint() string {
@@ -97,7 +97,11 @@ func (m SetWebhook) WritePayload(body io.Writer) (string, error) {
 	}
 	if m.Certificate == nil {
 		// then there's no need to send multipart
-		return jsonPayload(m, body)
+		return jsonPayload(&m, body)
+	}
+
+	if err := reused.Validator().Struct(m); err != nil {
+		return "", fmt.Errorf("validating setWebhook: %w", err)
 	}
 
 	cert := m.Certificate.(InputFileLocal)
@@ -122,7 +126,7 @@ func (m DeleteWebhook) APIEndpoint() string {
 }
 
 func (m DeleteWebhook) WritePayload(w io.Writer) (string, error) {
-	return jsonPayload(m, w)
+	return jsonPayload(&m, w)
 }
 
 /*
@@ -130,8 +134,8 @@ func (m DeleteWebhook) WritePayload(w io.Writer) (string, error) {
 */
 
 type SendMessage struct {
-	ChatID               string           `json:"chat_id" validate:"required"`
-	Text                 string           `json:"text" validate:"required,min=1,max=4096"`
+	ChatID               string           `validate:"required" json:"chat_id"`
+	Text                 string           `validate:"required,min=1,max=4096" json:"text"`
 	BusinessConnectionID string           `json:"business_connection_id,omitempty"`
 	MessageThreadID      int              `json:"message_thread_id,omitempty"`
 	ParseMode            string           `json:"parse_mode,omitempty"`
@@ -149,17 +153,17 @@ func (m SendMessage) APIEndpoint() string {
 }
 
 func (m SendMessage) WritePayload(body io.Writer) (string, error) {
-	return jsonPayload(m, body)
+	return jsonPayload(&m, body)
 }
 
 type ForwardMessage struct {
-	ChatID              string `json:"chat_id"`
-	FromChatID          string `json:"from_chat_id"`
-	MessageID           int    `json:"message_id"`
-	MessageThreadID     int    `json:"message_thread_id,omitempty"`
-	VideoStartTimestamp int    `json:"video_start_timestamp,omitempty"`
-	DisableNotification bool   `json:"disable_notification,omitempty"`
-	ProtectContent      bool   `json:"protect_content,omitempty"`
+	ChatID              string `validate:"required" json:"chat_id"`
+	FromChatID          string `validate:"required" json:"from_chat_id"`
+	MessageID           int    `validate:"required" json:"message_id"`
+	MessageThreadID     *int   `json:"message_thread_id,omitempty"`
+	VideoStartTimestamp *int   `json:"video_start_timestamp,omitempty"`
+	DisableNotification *bool  `json:"disable_notification,omitempty"`
+	ProtectContent      *bool  `json:"protect_content,omitempty"`
 }
 
 func (m ForwardMessage) APIEndpoint() string {
@@ -167,16 +171,16 @@ func (m ForwardMessage) APIEndpoint() string {
 }
 
 func (m ForwardMessage) WritePayload(w io.Writer) (string, error) {
-	return jsonPayload(m, w)
+	return jsonPayload(&m, w)
 }
 
 type ForwardMessages struct {
-	ChatID              string `json:"chat_id"`
-	FromChatID          string `json:"from_chat_id"`
-	MessageIDs          []int  `json:"message_ids"`
-	MessageThreadID     int    `json:"message_thread_id,omitempty"`
-	DisableNotification bool   `json:"disable_notification,omitempty"`
-	ProtectContent      bool   `json:"protect_content,omitempty"`
+	ChatID              string `validate:"required" json:"chat_id"`
+	FromChatID          string `validate:"required" json:"from_chat_id"`
+	MessageIDs          []int  `validate:"required" json:"message_ids"`
+	MessageThreadID     *int   `json:"message_thread_id,omitempty"`
+	DisableNotification *bool  `json:"disable_notification,omitempty"`
+	ProtectContent      *bool  `json:"protect_content,omitempty"`
 }
 
 func (m ForwardMessages) APIEndpoint() string {
@@ -184,24 +188,24 @@ func (m ForwardMessages) APIEndpoint() string {
 }
 
 func (m ForwardMessages) WritePayload(w io.Writer) (string, error) {
-	return jsonPayload(m, w)
+	return jsonPayload(&m, w)
 }
 
 type CopyMessage struct {
-	ChatID                string           `json:"chat_id"`
-	FromChatID            string           `json:"from_chat_id"`
-	MessageID             int              `json:"message_id"`
-	MessageThreadID       int              `json:"message_thread_id,omitempty"`
-	VideoStartTimestamp   int              `json:"video_start_timestamp,omitempty"`
-	Caption               string           `json:"caption,omitempty"`
-	ParseMode             string           `json:"parse_mode,omitempty"`
-	CaptionEntities       []MessageEntity  `json:"caption_entities,omitempty"`
-	ShowCaptionAboveMedia bool             `json:"show_caption_above_media,omitempty"`
-	DisableNotification   bool             `json:"disable_notification,omitempty"`
-	ProtectContent        bool             `json:"protect_content,omitempty"`
-	AllowPaidBroadcast    bool             `json:"allow_paid_broadcast,omitempty"`
+	ChatID                string           `validate:"required" json:"chat_id"`
+	FromChatID            string           `validate:"required" json:"from_chat_id"`
+	MessageID             int              `validate:"required" json:"message_id"`
+	MessageThreadID       *int             `json:"message_thread_id,omitempty"`
+	VideoStartTimestamp   *int             `json:"video_start_timestamp,omitempty"`
+	Caption               *string          `json:"caption,omitempty"`
+	ParseMode             *string          `json:"parse_mode,omitempty"`
+	CaptionEntities       *[]MessageEntity `json:"caption_entities,omitempty"`
+	ShowCaptionAboveMedia *bool            `json:"show_caption_above_media,omitempty"`
+	DisableNotification   *bool            `json:"disable_notification,omitempty"`
+	ProtectContent        *bool            `json:"protect_content,omitempty"`
+	AllowPaidBroadcast    *bool            `json:"allow_paid_broadcast,omitempty"`
 	ReplyParameters       *ReplyParameters `json:"reply_parameters,omitempty"`
-	ReplyMarkup           ReplyMarkup      `json:"reply_markup,omitempty"`
+	ReplyMarkup           *ReplyMarkup     `json:"reply_markup,omitempty"`
 }
 
 func (m CopyMessage) APIEndpoint() string {
@@ -209,7 +213,7 @@ func (m CopyMessage) APIEndpoint() string {
 }
 
 func (m CopyMessage) WritePayload(w io.Writer) (string, error) {
-	return jsonPayload(m, w)
+	return jsonPayload(&m, w)
 }
 
 type CopyMessages struct {
@@ -228,7 +232,7 @@ func (m CopyMessages) APIEndpoint() string {
 }
 
 func (m CopyMessages) WritePayload(w io.Writer) (string, error) {
-	return jsonPayload(m, w)
+	return jsonPayload(&m, w)
 }
 
 type SendPhoto struct {
@@ -255,7 +259,7 @@ func (m SendPhoto) APIEndpoint() string {
 
 func (m SendPhoto) WritePayload(body io.Writer) (string, error) {
 	if _, ok := m.Photo.(InputFileRemote); ok {
-		return jsonPayload(m, body)
+		return jsonPayload(&m, body)
 	}
 
 	photo := m.Photo.(InputFileLocal)
@@ -279,8 +283,8 @@ func (m SendPhoto) WritePayload(body io.Writer) (string, error) {
 }
 
 type SendAudio struct {
-	ChatID               string           `json:"chat_id"`
-	Audio                InputFile        `json:"audio"`
+	ChatID               string           `validate:"required" json:"chat_id"`
+	Audio                InputFile        `validate:"required" json:"audio"`
 	BusinessConnectionID string           `json:"business_connection_id,omitempty"`
 	MessageThreadID      int              `json:"message_thread_id,omitempty"`
 	Caption              string           `json:"caption,omitempty"`
@@ -301,8 +305,8 @@ func (m SendAudio) WritePayload(body io.Writer) (string, error) {
 	audio, ok1 := m.Audio.(InputFileLocal)
 	thumbnail, ok2 := m.Thumbnail.(InputFileLocal)
 
-	if !(ok1 && ok2) {
-		return jsonPayload(m, body)
+	if !ok1 && !ok2 {
+		return jsonPayload(&m, body)
 	}
 
 	mw := formy.NewWriter(body).
@@ -351,7 +355,7 @@ func (m GetMyCommands) APIEndpoint() string {
 }
 
 func (m GetMyCommands) WritePayload(body io.Writer) (string, error) {
-	return jsonPayload(m, body)
+	return jsonPayload(&m, body)
 }
 
 type SetMyCommands struct {
@@ -365,5 +369,5 @@ func (m SetMyCommands) APIEndpoint() string {
 }
 
 func (m SetMyCommands) WritePayload(body io.Writer) (string, error) {
-	return jsonPayload(m, body)
+	return jsonPayload(&m, body)
 }
