@@ -160,10 +160,10 @@ type ForwardMessage struct {
 	ChatID              string `validate:"required" json:"chat_id"`
 	FromChatID          string `validate:"required" json:"from_chat_id"`
 	MessageID           int    `validate:"required" json:"message_id"`
-	MessageThreadID     *int   `json:"message_thread_id,omitempty"`
-	VideoStartTimestamp *int   `json:"video_start_timestamp,omitempty"`
-	DisableNotification *bool  `json:"disable_notification,omitempty"`
-	ProtectContent      *bool  `json:"protect_content,omitempty"`
+	MessageThreadID     int    `json:"message_thread_id,omitempty"`
+	VideoStartTimestamp int    `json:"video_start_timestamp,omitempty"`
+	DisableNotification bool   `json:"disable_notification,omitempty"`
+	ProtectContent      bool   `json:"protect_content,omitempty"`
 }
 
 func (m ForwardMessage) APIEndpoint() string {
@@ -178,9 +178,9 @@ type ForwardMessages struct {
 	ChatID              string `validate:"required" json:"chat_id"`
 	FromChatID          string `validate:"required" json:"from_chat_id"`
 	MessageIDs          []int  `validate:"required" json:"message_ids"`
-	MessageThreadID     *int   `json:"message_thread_id,omitempty"`
-	DisableNotification *bool  `json:"disable_notification,omitempty"`
-	ProtectContent      *bool  `json:"protect_content,omitempty"`
+	MessageThreadID     int    `json:"message_thread_id,omitempty"`
+	DisableNotification bool   `json:"disable_notification,omitempty"`
+	ProtectContent      bool   `json:"protect_content,omitempty"`
 }
 
 func (m ForwardMessages) APIEndpoint() string {
@@ -195,17 +195,17 @@ type CopyMessage struct {
 	ChatID                string           `validate:"required" json:"chat_id"`
 	FromChatID            string           `validate:"required" json:"from_chat_id"`
 	MessageID             int              `validate:"required" json:"message_id"`
-	MessageThreadID       *int             `json:"message_thread_id,omitempty"`
-	VideoStartTimestamp   *int             `json:"video_start_timestamp,omitempty"`
-	Caption               *string          `json:"caption,omitempty"`
-	ParseMode             *string          `json:"parse_mode,omitempty"`
+	MessageThreadID       int              `json:"message_thread_id,omitempty"`
+	VideoStartTimestamp   int              `json:"video_start_timestamp,omitempty"`
+	Caption               string           `json:"caption,omitempty"`
+	ParseMode             string           `json:"parse_mode,omitempty"`
 	CaptionEntities       *[]MessageEntity `json:"caption_entities,omitempty"`
-	ShowCaptionAboveMedia *bool            `json:"show_caption_above_media,omitempty"`
-	DisableNotification   *bool            `json:"disable_notification,omitempty"`
-	ProtectContent        *bool            `json:"protect_content,omitempty"`
-	AllowPaidBroadcast    *bool            `json:"allow_paid_broadcast,omitempty"`
+	ShowCaptionAboveMedia bool             `json:"show_caption_above_media,omitempty"`
+	DisableNotification   bool             `json:"disable_notification,omitempty"`
+	ProtectContent        bool             `json:"protect_content,omitempty"`
+	AllowPaidBroadcast    bool             `json:"allow_paid_broadcast,omitempty"`
 	ReplyParameters       *ReplyParameters `json:"reply_parameters,omitempty"`
-	ReplyMarkup           *ReplyMarkup     `json:"reply_markup,omitempty"`
+	ReplyMarkup           ReplyMarkup      `json:"reply_markup,omitempty"`
 }
 
 func (m CopyMessage) APIEndpoint() string {
@@ -242,7 +242,7 @@ type SendPhoto struct {
 	MessageThreadID       int              `json:"message_thread_id,omitempty"`
 	Caption               string           `json:"caption,omitempty"`
 	ParseMode             string           `json:"parse_mode,omitempty"`
-	CaptionEntities       []MessageEntity  `json:"caption_entities,omitempty"`
+	CaptionEntities       *[]MessageEntity `json:"caption_entities,omitempty"`
 	ShowCaptionAboveMedia bool             `json:"show_caption_above_media,omitempty"`
 	HasSpoiler            bool             `json:"has_spoiler,omitempty"`
 	DisableNotification   bool             `json:"disable_notification,omitempty"`
@@ -269,7 +269,7 @@ func (m SendPhoto) WritePayload(body io.Writer) (string, error) {
 		WriteStringCond("business_connection_id", m.BusinessConnectionID, notEmptyString(m.BusinessConnectionID)).
 		WriteIntCond("message_thread_id", m.MessageThreadID, notEmptyInt(m.MessageThreadID)).
 		WriteStringCond("caption", m.Caption, notEmptyString(m.Caption)).
-		WriteJSONCond("message_entities", m.CaptionEntities, notEmptySlice(m.CaptionEntities)).
+		WriteJSONCond("message_entities", m.CaptionEntities, notEmptySlice(*m.CaptionEntities)).
 		WriteBoolCond("show_caption_above_media", m.ShowCaptionAboveMedia, func() bool { return m.ShowCaptionAboveMedia }).
 		WriteBoolCond("has_spoiler", m.HasSpoiler, func() bool { return m.HasSpoiler }).
 		WriteBoolCond("disable_notification", m.DisableNotification, func() bool { return m.DisableNotification }).
@@ -289,7 +289,7 @@ type SendAudio struct {
 	MessageThreadID      int              `json:"message_thread_id,omitempty"`
 	Caption              string           `json:"caption,omitempty"`
 	ParseMode            string           `json:"parse_mode,omitempty"`
-	CaptionEntities      []MessageEntity  `json:"caption_entities,omitempty"`
+	CaptionEntities      *[]MessageEntity `json:"caption_entities,omitempty"`
 	Duration             int              `json:"duration,omitempty"`
 	Performer            string           `json:"performer,omitempty"`
 	Title                string           `json:"title,omitempty"`
@@ -315,7 +315,7 @@ func (m SendAudio) WritePayload(body io.Writer) (string, error) {
 		WriteIntCond("message_thread_id", m.MessageThreadID, notEmptyInt(m.MessageThreadID)).
 		WriteStringCond("caption", m.Caption, notEmptyString(m.Caption)).
 		WriteStringCond("parse_mode", m.ParseMode, notEmptyString(m.ParseMode)).
-		WriteJSONCond("caption_entities", m.CaptionEntities, notEmptySlice(m.CaptionEntities)).
+		WriteJSONCond("caption_entities", m.CaptionEntities, notEmptySlice(*m.CaptionEntities)).
 		WriteIntCond("duration", m.Duration, notEmptyInt(m.Duration)).
 		WriteStringCond("performer", m.Performer, notEmptyString(m.Performer)).
 		WriteStringCond("title", m.Title, notEmptyString(m.Title)).
@@ -343,6 +343,319 @@ func (m SendAudio) WritePayload(body io.Writer) (string, error) {
 
 func (m SendAudio) APIEndpoint() string {
 	return "sendAudio"
+}
+
+type SendDocument struct {
+	ChatID                      string           `validate:"required" json:"chat_id"`
+	Document                    InputFile        `validate:"required" json:"document"`
+	BusinessConnectionID        string           `json:"business_connection_id,omitempty"`
+	MessageThreadID             int              `json:"message_thread_id,omitempty"`
+	Thumbnail                   InputFile        `json:"thumbnail,omitempty"`
+	Caption                     string           `json:"caption,omitempty"`
+	ParseMode                   string           `json:"parse_mode,omitempty"`
+	CaptionEntities             *[]MessageEntity `json:"caption_entities,omitempty"`
+	DisableContentTypeDetection bool             `json:"disable_content_type_detection,omitempty"`
+	DisableNotification         bool             `json:"disable_notification,omitempty"`
+	ProtectContent              bool             `json:"protect_content,omitempty"`
+	AllowPaidBroadcast          bool             `json:"allow_paid_broadcast,omitempty"`
+	MessageEffectID             string           `json:"message_effect_id,omitempty"`
+	ReplyParameters             *ReplyParameters `json:"reply_parameters,omitempty"`
+	ReplyMarkup                 ReplyMarkup      `json:"reply_markup,omitempty"`
+}
+
+func (m SendDocument) APIEndpoint() string {
+	return "sendDocument"
+}
+
+func (m SendDocument) WritePayload(body io.Writer) (string, error) {
+	doc, ok1 := m.Document.(InputFileLocal)
+	thumbnail, ok2 := m.Thumbnail.(InputFileLocal)
+
+	if !ok1 && !ok2 {
+		return jsonPayload(&m, body)
+	}
+
+	mw := formy.NewWriter(body).
+		WriteString("chat_id", m.ChatID).
+		WriteStringCond("business_connection_id", m.BusinessConnectionID, notEmptyString(m.BusinessConnectionID)).
+		WriteIntCond("message_thread_id", m.MessageThreadID, notEmptyInt(m.MessageThreadID)).
+		WriteStringCond("caption", m.Caption, notEmptyString(m.Caption)).
+		WriteStringCond("parse_mode", m.ParseMode, notEmptyString(m.ParseMode)).
+		WriteJSONCond("caption_entities", m.CaptionEntities, notEmptySlice(*m.CaptionEntities)).
+		WriteBoolCond("disable_content_type_detection", m.DisableContentTypeDetection, func() bool { return m.DisableContentTypeDetection }).
+		WriteBoolCond("disable_notification", m.DisableNotification, func() bool { return m.DisableNotification }).
+		WriteBoolCond("protect_content", m.ProtectContent, func() bool { return m.ProtectContent }).
+		WriteStringCond("message_effect_id", m.MessageEffectID, notEmptyString(m.MessageEffectID)).
+		WriteJSONCond("reply_markup", m.ReplyMarkup, func() bool { return m.ReplyMarkup != nil }).
+		WriteJSONCond("reply_parameters", m.ReplyParameters, func() bool { return m.ReplyParameters != nil })
+
+	if ok1 {
+		mw.WriteFile("document", doc.Name, doc.Data)
+	} else {
+		rem := m.Document.(InputFileRemote)
+		mw.WriteString("document", string(rem))
+	}
+	if ok2 {
+		mw.WriteFile("thumbnail", thumbnail.Name, thumbnail.Data)
+	} else {
+		rem, ok := m.Thumbnail.(InputFileRemote)
+		mw.WriteStringCond("thumbnail", string(rem), func() bool { return ok })
+	}
+
+	return mw.FormDataContentType(), mw.Close()
+}
+
+type SendVideo struct {
+	ChatID                string           `validate:"required" json:"chat_id"`
+	Video                 InputFile        `validate:"required" json:"video"`
+	BusinessConnectionID  string           `json:"business_connection_id,omitempty"`
+	MessageThreadID       int              `json:"message_thread_id,omitempty"`
+	Duration              int              `json:"duration,omitempty"`
+	Width                 int              `json:"width,omitempty"`
+	Height                int              `json:"height,omitempty"`
+	Thumbnail             InputFile        `json:"thumbnail,omitempty"`
+	Cover                 InputFile        `json:"cover,omitempty"`
+	StartTimestamp        int              `json:"start_timestamp,omitempty"`
+	Caption               string           `json:"caption,omitempty"`
+	ParseMode             string           `json:"parse_mode,omitempty"`
+	CaptionEntities       *[]MessageEntity `json:"caption_entities,omitempty"`
+	ShowCaptionAboveMedia bool             `json:"show_caption_above_media,omitempty"`
+	HasSpoiler            bool             `json:"has_spoiler,omitempty"`
+	SupportsStreaming     bool             `json:"supports_streaming,omitempty"`
+	DisableNotification   bool             `json:"disable_notification,omitempty"`
+	ProtectContent        bool             `json:"protect_content,omitempty"`
+	AllowPaidBroadcast    bool             `json:"allow_paid_broadcast,omitempty"`
+	MessageEffectID       string           `json:"message_effect_id,omitempty"`
+	ReplyParameters       *ReplyParameters `json:"reply_parameters,omitempty"`
+	ReplyMarkup           ReplyMarkup      `json:"reply_markup,omitempty"`
+}
+
+func (m SendVideo) APIEndpoint() string {
+	return "sendVideo"
+}
+
+func (m SendVideo) WritePayload(body io.Writer) (string, error) {
+	video, ok1 := m.Video.(InputFileLocal)
+	thumbnail, ok2 := m.Thumbnail.(InputFileLocal)
+	cover, ok3 := m.Cover.(InputFileLocal)
+
+	if !ok1 && !ok2 && !ok3 {
+		return jsonPayload(&m, body)
+	}
+
+	mw := formy.NewWriter(body).
+		WriteString("chat_id", m.ChatID).
+		WriteStringCond("business_connection_id", m.BusinessConnectionID, notEmptyString(m.BusinessConnectionID)).
+		WriteIntCond("message_thread_id", m.MessageThreadID, notEmptyInt(m.MessageThreadID)).
+		WriteIntCond("duration", m.Duration, notEmptyInt(m.Duration)).
+		WriteIntCond("width", m.Width, notEmptyInt(m.Width)).
+		WriteIntCond("height", m.Height, notEmptyInt(m.Height)).
+		WriteIntCond("start_timestamp", m.StartTimestamp, notEmptyInt(m.StartTimestamp)).
+		WriteStringCond("caption", m.Caption, notEmptyString(m.Caption)).
+		WriteStringCond("parse_mode", m.ParseMode, notEmptyString(m.ParseMode)).
+		WriteJSONCond("caption_entities", m.CaptionEntities, notEmptySlice(*m.CaptionEntities)).
+		WriteBoolCond("show_caption_above_media", m.ShowCaptionAboveMedia, func() bool { return m.ShowCaptionAboveMedia }).
+		WriteBoolCond("has_spoiler", m.HasSpoiler, func() bool { return m.HasSpoiler }).
+		WriteBoolCond("supports_streaming", m.SupportsStreaming, func() bool { return m.SupportsStreaming }).
+		WriteBoolCond("disable_notification", m.DisableNotification, func() bool { return m.DisableNotification }).
+		WriteBoolCond("protect_content", m.ProtectContent, func() bool { return m.ProtectContent }).
+		WriteBoolCond("allow_paid_broadcast", m.AllowPaidBroadcast, func() bool { return m.AllowPaidBroadcast }).
+		WriteStringCond("message_effect_id", m.MessageEffectID, notEmptyString(m.MessageEffectID)).
+		WriteJSONCond("reply_markup", m.ReplyMarkup, func() bool { return m.ReplyMarkup != nil }).
+		WriteJSONCond("reply_parameters", m.ReplyParameters, func() bool { return m.ReplyParameters != nil })
+
+	if ok1 {
+		mw.WriteFile("video", video.Name, video.Data)
+	} else {
+		rem := m.Video.(InputFileRemote)
+		mw.WriteString("video", string(rem))
+	}
+	if ok2 {
+		mw.WriteFile("thumbnail", thumbnail.Name, thumbnail.Data)
+	} else {
+		rem, ok := m.Thumbnail.(InputFileRemote)
+		mw.WriteStringCond("thumbnail", string(rem), func() bool { return ok })
+	}
+	if ok3 {
+		mw.WriteFile("cover", cover.Name, cover.Data)
+	} else {
+		rem, ok := m.Cover.(InputFileRemote)
+		mw.WriteStringCond("cover", string(rem), func() bool { return ok })
+	}
+
+	return mw.FormDataContentType(), mw.Close()
+}
+
+type SendAnimation struct {
+	ChatID                string           `validate:"required" json:"chat_id"`
+	Animation             InputFile        `validate:"required" json:"animation"`
+	BusinessConnectionID  string           `json:"business_connection_id,omitempty"`
+	MessageThreadID       int              `json:"message_thread_id,omitempty"`
+	Duration              int              `json:"duration,omitempty"`
+	Width                 int              `json:"width,omitempty"`
+	Height                int              `json:"height,omitempty"`
+	Thumbnail             InputFile        `json:"thumbnail,omitempty"`
+	Caption               string           `json:"caption,omitempty"`
+	ParseMode             string           `json:"parse_mode,omitempty"`
+	CaptionEntities       *[]MessageEntity `json:"caption_entities,omitempty"`
+	ShowCaptionAboveMedia bool             `json:"show_caption_above_media,omitempty"`
+	HasSpoiler            bool             `json:"has_spoiler,omitempty"`
+	DisableNotification   bool             `json:"disable_notification,omitempty"`
+	ProtectContent        bool             `json:"protect_content,omitempty"`
+	AllowPaidBroadcast    bool             `json:"allow_paid_broadcast,omitempty"`
+	MessageEffectID       string           `json:"message_effect_id,omitempty"`
+	ReplyParameters       *ReplyParameters `json:"reply_parameters,omitempty"`
+	ReplyMarkup           ReplyMarkup      `json:"reply_markup,omitempty"`
+}
+
+func (m SendAnimation) APIEndpoint() string {
+	return "sendAnimation"
+}
+
+func (m SendAnimation) WritePayload(body io.Writer) (string, error) {
+	animation, ok1 := m.Animation.(InputFileLocal)
+	thumbnail, ok2 := m.Thumbnail.(InputFileLocal)
+
+	if !ok1 && !ok2 {
+		return jsonPayload(&m, body)
+	}
+
+	mw := formy.NewWriter(body).
+		WriteString("chat_id", m.ChatID).
+		WriteStringCond("business_connection_id", m.BusinessConnectionID, notEmptyString(m.BusinessConnectionID)).
+		WriteIntCond("message_thread_id", m.MessageThreadID, notEmptyInt(m.MessageThreadID)).
+		WriteIntCond("duration", m.Duration, notEmptyInt(m.Duration)).
+		WriteIntCond("width", m.Width, notEmptyInt(m.Width)).
+		WriteIntCond("height", m.Height, notEmptyInt(m.Height)).
+		WriteStringCond("caption", m.Caption, notEmptyString(m.Caption)).
+		WriteStringCond("parse_mode", m.ParseMode, notEmptyString(m.ParseMode)).
+		WriteJSONCond("caption_entities", m.CaptionEntities, notEmptySlice(*m.CaptionEntities)).
+		WriteBoolCond("show_caption_above_media", m.ShowCaptionAboveMedia, func() bool { return m.ShowCaptionAboveMedia }).
+		WriteBoolCond("has_spoiler", m.HasSpoiler, func() bool { return m.HasSpoiler }).
+		WriteBoolCond("disable_notification", m.DisableNotification, func() bool { return m.DisableNotification }).
+		WriteBoolCond("protect_content", m.ProtectContent, func() bool { return m.ProtectContent }).
+		WriteBoolCond("allow_paid_broadcast", m.AllowPaidBroadcast, func() bool { return m.AllowPaidBroadcast }).
+		WriteStringCond("message_effect_id", m.MessageEffectID, notEmptyString(m.MessageEffectID)).
+		WriteJSONCond("reply_markup", m.ReplyMarkup, func() bool { return m.ReplyMarkup != nil }).
+		WriteJSONCond("reply_parameters", m.ReplyParameters, func() bool { return m.ReplyParameters != nil })
+
+	if ok1 {
+		mw.WriteFile("animation", animation.Name, animation.Data)
+	} else {
+		rem := m.Animation.(InputFileRemote)
+		mw.WriteString("animation", string(rem))
+	}
+	if ok2 {
+		mw.WriteFile("thumbnail", thumbnail.Name, thumbnail.Data)
+	} else {
+		rem, ok := m.Thumbnail.(InputFileRemote)
+		mw.WriteStringCond("thumbnail", string(rem), func() bool { return ok })
+	}
+
+	return mw.FormDataContentType(), mw.Close()
+}
+
+type SendVoice struct {
+	ChatID               string           `validate:"required" json:"chat_id"`
+	Voice                InputFile        `validate:"required" json:"voice"`
+	BusinessConnectionID string           `json:"business_connection_id,omitempty"`
+	MessageThreadID      int              `json:"message_thread_id,omitempty"`
+	Caption              string           `json:"caption,omitempty"`
+	ParseMode            string           `json:"parse_mode,omitempty"`
+	CaptionEntities      *[]MessageEntity `json:"caption_entities"`
+	Duration             int              `json:"duration,omitempty"`
+	DisableNotification  bool             `json:"disable_notification,omitempty"`
+	ProtectContent       bool             `json:"protect_content,omitempty"`
+	AllowPaidBroadcast   bool             `json:"allow_paid_broadcast,omitempty"`
+	MessageEffectID      string           `json:"message_effect_id,omitempty"`
+	ReplyParameters      *ReplyParameters `json:"reply_parameters,omitempty"`
+	ReplyMarkup          ReplyMarkup      `json:"reply_markup,omitempty"`
+}
+
+func (m SendVoice) APIEndpoint() string {
+	return "sendVoice"
+}
+
+func (m SendVoice) WritePayload(body io.Writer) (string, error) {
+	voice, ok1 := m.Voice.(InputFileLocal)
+	if !ok1 {
+		return jsonPayload(&m, body)
+	}
+
+	mw := formy.NewWriter(body).
+		WriteString("chat_id", m.ChatID).
+		WriteFile("voice", voice.Name, voice.Data).
+		WriteStringCond("business_connection_id", m.BusinessConnectionID, notEmptyString(m.BusinessConnectionID)).
+		WriteIntCond("message_thread_id", m.MessageThreadID, notEmptyInt(m.MessageThreadID)).
+		WriteStringCond("caption", m.Caption, notEmptyString(m.Caption)).
+		WriteStringCond("parse_mode", m.ParseMode, notEmptyString(m.ParseMode)).
+		WriteJSONCond("caption_entities", m.CaptionEntities, notEmptySlice(*m.CaptionEntities)).
+		WriteIntCond("duration", m.Duration, notEmptyInt(m.Duration)).
+		WriteBoolCond("disable_notification", m.DisableNotification, func() bool { return m.DisableNotification }).
+		WriteBoolCond("protect_content", m.ProtectContent, func() bool { return m.ProtectContent }).
+		WriteBoolCond("allow_paid_broadcast", m.AllowPaidBroadcast, func() bool { return m.AllowPaidBroadcast }).
+		WriteStringCond("message_effect_id", m.MessageEffectID, notEmptyString(m.MessageEffectID)).
+		WriteJSONCond("reply_markup", m.ReplyMarkup, func() bool { return m.ReplyMarkup != nil }).
+		WriteJSONCond("reply_parameters", m.ReplyParameters, func() bool { return m.ReplyParameters != nil })
+
+	return mw.FormDataContentType(), mw.Close()
+}
+
+type SendVideoNote struct {
+	ChatID               string           `validate:"required" json:"chat_id"`
+	VideoNote            InputFile        `validate:"required" json:"video_note"`
+	BusinessConnectionID string           `json:"business_connection_id,omitempty"`
+	MessageThreadID      int              `json:"message_thread_id,omitempty"`
+	Duration             int              `json:"duration,omitempty"`
+	Length               int              `json:"length,omitempty"`
+	Thumbnail            InputFile        `json:"thumbnail,omitempty"`
+	DisableNotification  bool             `json:"disable_notification,omitempty"`
+	ProtectContent       bool             `json:"protect_content,omitempty"`
+	AllowPaidBroadcast   bool             `json:"allow_paid_broadcast,omitempty"`
+	MessageEffectID      string           `json:"message_effect_id,omitempty"`
+	ReplyParameters      *ReplyParameters `json:"reply_parameters,omitempty"`
+	ReplyMarkup          ReplyMarkup      `json:"reply_markup,omitempty"`
+}
+
+func (m SendVideoNote) APIEndpoint() string {
+	return "sendVideoNote"
+}
+
+func (m SendVideoNote) WritePayload(body io.Writer) (string, error) {
+	note, ok1 := m.VideoNote.(InputFileLocal)
+	thumbnail, ok2 := m.Thumbnail.(InputFileLocal)
+
+	if !ok1 && !ok2 {
+		return jsonPayload(&m, body)
+	}
+
+	mw := formy.NewWriter(body).
+		WriteString("chat_id", m.ChatID).
+		WriteStringCond("business_connection_id", m.BusinessConnectionID, notEmptyString(m.BusinessConnectionID)).
+		WriteIntCond("message_thread_id", m.MessageThreadID, notEmptyInt(m.MessageThreadID)).
+		WriteIntCond("duration", m.Duration, notEmptyInt(m.Duration)).
+		WriteIntCond("length", m.Length, notEmptyInt(m.Length)).
+		WriteBoolCond("disable_notification", m.DisableNotification, func() bool { return m.DisableNotification }).
+		WriteBoolCond("protect_content", m.ProtectContent, func() bool { return m.ProtectContent }).
+		WriteBoolCond("allow_paid_broadcast", m.AllowPaidBroadcast, func() bool { return m.AllowPaidBroadcast }).
+		WriteStringCond("message_effect_id", m.MessageEffectID, notEmptyString(m.MessageEffectID)).
+		WriteJSONCond("reply_markup", m.ReplyMarkup, func() bool { return m.ReplyMarkup != nil }).
+		WriteJSONCond("reply_parameters", m.ReplyParameters, func() bool { return m.ReplyParameters != nil })
+
+	if ok1 {
+		mw.WriteFile("video_note", note.Name, note.Data)
+	} else {
+		rem := m.VideoNote.(InputFileRemote)
+		mw.WriteString("video_note", string(rem))
+	}
+	if ok2 {
+		mw.WriteFile("thumbnail", thumbnail.Name, thumbnail.Data)
+	} else {
+		rem, ok := m.Thumbnail.(InputFileRemote)
+		mw.WriteStringCond("thumbnail", string(rem), func() bool { return ok })
+	}
+
+	return mw.FormDataContentType(), mw.Close()
 }
 
 type GetMyCommands struct {
